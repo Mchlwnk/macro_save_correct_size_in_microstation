@@ -32,7 +32,8 @@ match.
 1. Check that the Bentley PDF driver is installed:
    `pdf.pltcfg`.
 2. Check the configuration variable `MS_PLTCFG_PATH`. It must point to the
-   folder that contains `pdf.pltcfg`.
+   folder that contains `pdf.pltcfg`. The macro checks this before printing
+   and refuses to start if the driver is not found.
 3. Open the Print dialog manually, select the Bentley PDF driver, and try to
    print one model. If that also fails, the problem is in the driver setup,
    not in the macro.

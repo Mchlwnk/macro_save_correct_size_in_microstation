@@ -149,6 +149,14 @@ Public Sub PrintCorrectSize()
         Exit Sub
     End If
 
+    If Not PrintDriverExists(PDF_DRIVER) Then
+        MsgBox "Cannot find the Bentley PDF driver '" & PDF_DRIVER & "'." & vbCrLf & vbCrLf & _
+               "Check that the driver is installed and that MS_PLTCFG_PATH points " & _
+               "to its folder. You can change PDF_DRIVER at the top of the macro.", _
+               vbExclamation, "PrintCorrectSize"
+        Exit Sub
+    End If
+
     outFolder = GetOutputFolder(df)
     If outFolder = "" Then Exit Sub
 
@@ -968,6 +976,40 @@ End Function
 '==============================================================================
 ' Files, names, small helpers
 '==============================================================================
+
+Private Function PrintDriverExists(ByVal driverName As String) As Boolean
+    Dim paths As String
+    Dim parts As Variant
+    Dim i As Long
+    Dim folder As String
+
+    PrintDriverExists = False
+    If Len(Trim$(driverName)) = 0 Then Exit Function
+
+    ' Allow PDF_DRIVER to be a full path as well as a file name.
+    If m_fso.FileExists(driverName) Then
+        PrintDriverExists = True
+        Exit Function
+    End If
+
+    On Error Resume Next
+    If Not ActiveWorkspace.IsConfigurationVariableDefined("MS_PLTCFG_PATH") Then
+        Exit Function
+    End If
+    paths = ActiveWorkspace.ConfigurationVariableValue("MS_PLTCFG_PATH")
+    On Error GoTo 0
+
+    parts = Split(paths, ";")
+    For i = LBound(parts) To UBound(parts)
+        folder = Trim$(CStr(parts(i)))
+        If Len(folder) > 0 Then
+            If m_fso.FileExists(m_fso.BuildPath(folder, driverName)) Then
+                PrintDriverExists = True
+                Exit Function
+            End If
+        End If
+    Next i
+End Function
 
 Private Function GetOutputFolder(ByVal df As DesignFile) As String
     Dim dgnFolder As String
