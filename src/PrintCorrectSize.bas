@@ -34,6 +34,10 @@ Option Explicit
 ' Bentley PDF plot driver. The file is searched through MS_PLTCFG_PATH.
 Private Const PDF_DRIVER As String = "pdf.pltcfg"
 
+' Check that PDF_DRIVER exists before touching the drawing. Set to False if
+' your driver is found through a path that MS_PLTCFG_PATH does not list.
+Private Const CHECK_PDF_DRIVER As Boolean = True
+
 ' Output sub-folder created next to the DGN. Use "" to write next to the DGN.
 Private Const OUTPUT_SUBFOLDER As String = "PDF"
 
@@ -116,6 +120,7 @@ Public Sub PrintCorrectSize()
     Dim originalModel As ModelReference
     Dim printModels() As ModelReference
     Dim infos() As PageInfo
+    Dim pi As PageInfo
     Dim names() As String
     Dim paths() As String
     Dim m As ModelReference
@@ -149,12 +154,15 @@ Public Sub PrintCorrectSize()
         Exit Sub
     End If
 
-    If Not PrintDriverExists(PDF_DRIVER) Then
-        MsgBox "Cannot find the Bentley PDF driver '" & PDF_DRIVER & "'." & vbCrLf & vbCrLf & _
-               "Check that the driver is installed and that MS_PLTCFG_PATH points " & _
-               "to its folder. You can change PDF_DRIVER at the top of the macro.", _
-               vbExclamation, "PrintCorrectSize"
-        Exit Sub
+    If CHECK_PDF_DRIVER Then
+        If Not PrintDriverExists(PDF_DRIVER) Then
+            MsgBox "Cannot find the Bentley PDF driver '" & PDF_DRIVER & "'." & vbCrLf & vbCrLf & _
+                   "Check that the driver is installed and that MS_PLTCFG_PATH points " & _
+                   "to its folder. You can change PDF_DRIVER at the top of the macro, " & _
+                   "or set CHECK_PDF_DRIVER to False.", _
+                   vbExclamation, "PrintCorrectSize"
+            Exit Sub
+        End If
     End If
 
     outFolder = GetOutputFolder(df)
@@ -191,7 +199,8 @@ Public Sub PrintCorrectSize()
         Set m = printModels(i - 1)
         m.Activate
         names(i - 1) = m.Name
-        infos(i - 1) = GetPageInfo(m)
+        GetPageInfo m, pi
+        infos(i - 1) = pi
         paths(i - 1) = MakePdfPath(df, m, n, outFolder)
     Next i
     originalModel.Activate
@@ -315,7 +324,7 @@ Public Sub PreviewCorrectSize()
     For i = 1 To n
         Set m = printModels(i - 1)
         m.Activate
-        pi = GetPageInfo(m)
+        GetPageInfo m, pi
 
         report = report & Format$(i, "00") & ". " & m.Name & vbCrLf
         If pi.Valid Then
@@ -378,8 +387,7 @@ End Function
 ' Page-size detection
 '==============================================================================
 
-Private Function GetPageInfo(ByVal m As ModelReference) As PageInfo
-    Dim pi As PageInfo
+Private Sub GetPageInfo(ByVal m As ModelReference, ByRef pi As PageInfo)
     Dim sd As SheetDefinition
     Dim b As BBox
 
@@ -401,10 +409,7 @@ Private Function GetPageInfo(ByVal m As ModelReference) As PageInfo
             End If
         End If
         On Error GoTo 0
-        If pi.Valid Then
-            GetPageInfo = pi
-            Exit Function
-        End If
+        If pi.Valid Then Exit Sub
 
         ' A sheet model without a usable sheet definition must be printed
         ' from a fence, like a normal design model.
@@ -421,8 +426,7 @@ Private Function GetPageInfo(ByVal m As ModelReference) As PageInfo
                         UORsToMM(m, b.MaxY - b.MinY), "BORDER LEVEL"
             If pi.Valid Then
                 pi.Box = b
-                GetPageInfo = pi
-                Exit Function
+                Exit Sub
             End If
         End If
         On Error GoTo 0
@@ -438,8 +442,7 @@ Private Function GetPageInfo(ByVal m As ModelReference) As PageInfo
                             UORsToMM(m, b.MaxY - b.MinY), "SELECTION"
                 If pi.Valid Then
                     pi.Box = b
-                    GetPageInfo = pi
-                    Exit Function
+                    Exit Sub
                 End If
             End If
         End If
@@ -454,8 +457,7 @@ Private Function GetPageInfo(ByVal m As ModelReference) As PageInfo
                     UORsToMM(m, b.MaxY - b.MinY), "CLOSED ELEMENT"
         If pi.Valid Then
             pi.Box = b
-            GetPageInfo = pi
-            Exit Function
+            Exit Sub
         End If
     End If
     On Error GoTo 0
@@ -472,8 +474,7 @@ Private Function GetPageInfo(ByVal m As ModelReference) As PageInfo
     End If
     On Error GoTo 0
 
-    GetPageInfo = pi
-End Function
+End Sub
 
 Private Function BBoxFromEnumerator(ByVal ee As ElementEnumerator) As BBox
     Dim b As BBox

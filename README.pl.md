@@ -124,6 +124,7 @@ Wszystkie ustawienia to stałe na początku `PrintCorrectSize.bas`:
 | Stała | Domyślnie | Znaczenie |
 |---|---|---|
 | `PDF_DRIVER` | `pdf.pltcfg` | Sterownik Bentley PDF. |
+| `CHECK_PDF_DRIVER` | `True` | Sprawdź, czy sterownik istnieje, przed drukowaniem. |
 | `OUTPUT_SUBFOLDER` | `PDF` | Podfolder na PDF-y; `""` zapisuje obok DGN. |
 | `BORDER_LEVEL_HINTS` | `RAMKA` | Fragmenty nazw leveli, oddzielone przecinkami, bez rozróżniania wielkości liter. Pasuje do `M_RAMKA` i ` _RAMKA`. |
 | `USE_SELECTION_AS_PAGE` | `True` | Użyj zaznaczenia, gdy nie znaleziono ramki. |

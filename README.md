@@ -125,6 +125,7 @@ All settings are constants at the top of `PrintCorrectSize.bas`:
 | Constant | Default | Meaning |
 |---|---|---|
 | `PDF_DRIVER` | `pdf.pltcfg` | Bentley PDF plot driver. |
+| `CHECK_PDF_DRIVER` | `True` | Check that the driver exists before printing. |
 | `OUTPUT_SUBFOLDER` | `PDF` | Sub-folder for PDFs; `""` writes next to the DGN. |
 | `BORDER_LEVEL_HINTS` | `RAMKA` | Comma-separated, case-insensitive level-name fragments. Matches `M_RAMKA` and ` _RAMKA`. |
 | `USE_SELECTION_AS_PAGE` | `True` | Use a selection set as a fallback when no frame is found. |
