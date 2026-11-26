@@ -23,8 +23,8 @@ albo ` _RAMKA`).
 - Mierzy ramkę na levelu `RAMKA` w każdym modelu.
 - Rozpoznaje rozmiar strony w kolejności:
   1. definicja arkusza w sheet modelu (jeśli występuje),
-  2. zaznaczenie elementów (ręczne wymuszenie rozmiaru),
-  3. elementy na levelu ramki/obrysu (`RAMKA`),
+  2. elementy na levelu ramki/obrysu (`RAMKA`, `M_RAMKA`, ` _RAMKA`),
+  3. zaznaczenie elementów (fallback, ręczne wymuszenie rozmiaru),
   4. największy zamknięty element,
   5. extents wszystkich elementów graficznych.
 - Jeśli zmierzona ramka odbiega od A4 albo A3 o maksymalnie 5 mm, strona jest

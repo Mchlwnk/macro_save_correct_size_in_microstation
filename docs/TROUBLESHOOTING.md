@@ -65,6 +65,9 @@ If your organisation uses a custom `.pltcfg` that locks the paper size, copy
 the standard `pdf.pltcfg`, enable paper size editing, and set `PDF_DRIVER` in
 the macro to the name of your copy.
 
+A very large custom page can also exceed the driver's maximum form size. In
+that case the driver may clamp the page or fail to print.
+
 ## The page size is wrong
 
 Run `Preview` first. The source is shown in brackets:
@@ -90,6 +93,10 @@ Run `Preview` first. The source is shown in brackets:
 For a design model, select the border (or all elements that define the page)
 before running the macro. The selection set is used as the page rectangle.
 This is the quickest way to fix a wrong automatic detection.
+
+If the frame is inside a reference attachment rather than in the active model,
+the scan does not see it. Place the frame in the master model or select the
+page elements manually.
 
 ## A4 sheets are still small, or large sheets are still clipped
 

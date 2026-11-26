@@ -707,20 +707,48 @@ Private Function PaperDimensions(ByVal paperName As String, _
     PaperDimensions = True
 
     Select Case UCase$(Trim$(paperName))
-        Case "A0": wMM = 841#: hMM = 1189#
-        Case "A1": wMM = 594#: hMM = 841#
-        Case "A2": wMM = 420#: hMM = 594#
-        Case "A3": wMM = 297#: hMM = 420#
-        Case "A4": wMM = 210#: hMM = 297#
-        Case "A5": wMM = 148#: hMM = 210#
-        Case "A6": wMM = 105#: hMM = 148#
-        Case "B0": wMM = 1000#: hMM = 1414#
-        Case "B1": wMM = 707#: hMM = 1000#
-        Case "B2": wMM = 500#: hMM = 707#
-        Case "B3": wMM = 353#: hMM = 500#
-        Case "B4": wMM = 250#: hMM = 353#
-        Case "B5": wMM = 176#: hMM = 250#
-        Case "B6": wMM = 125#: hMM = 176#
+        Case "A0"
+            wMM = 841#
+            hMM = 1189#
+        Case "A1"
+            wMM = 594#
+            hMM = 841#
+        Case "A2"
+            wMM = 420#
+            hMM = 594#
+        Case "A3"
+            wMM = 297#
+            hMM = 420#
+        Case "A4"
+            wMM = 210#
+            hMM = 297#
+        Case "A5"
+            wMM = 148#
+            hMM = 210#
+        Case "A6"
+            wMM = 105#
+            hMM = 148#
+        Case "B0"
+            wMM = 1000#
+            hMM = 1414#
+        Case "B1"
+            wMM = 707#
+            hMM = 1000#
+        Case "B2"
+            wMM = 500#
+            hMM = 707#
+        Case "B3"
+            wMM = 353#
+            hMM = 500#
+        Case "B4"
+            wMM = 250#
+            hMM = 353#
+        Case "B5"
+            wMM = 176#
+            hMM = 250#
+        Case "B6"
+            wMM = 125#
+            hMM = 176#
         Case Else
             PaperDimensions = False
     End Select

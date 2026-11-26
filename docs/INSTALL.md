@@ -50,6 +50,15 @@ manually with the Project Manager.
 4. Save it as `PrintCorrectSize.mvba` in the macro folder from step 2.
 5. The project appears in the Project Manager list.
 
+Alternative: open **Utilities > Key-in** and enter
+
+```text
+vba create PrintCorrectSize.mvba
+```
+
+This creates and loads the empty project. Then continue with the import step
+below.
+
 The project name matters: the example key-in uses
 `[PrintCorrectSize]`. If you choose another name, use that name in the key-in.
 
@@ -60,7 +69,8 @@ The project name matters: the example key-in uses
    editor.
 3. In the VBA editor, choose **File > Import File...**.
 4. Select `PrintCorrectSize.bas`.
-5. The module `PrintCorrectSize` appears in the Project Explorer.
+5. The module `PrintCorrectSize` appears in the Project Explorer. If a module
+   with that name already exists, remove the old one first, then import again.
 6. Choose **File > Save** (or Ctrl+S) to save the `.mvba` project.
 7. Close the VBA editor.
 

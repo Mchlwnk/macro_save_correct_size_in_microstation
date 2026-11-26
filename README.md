@@ -22,8 +22,8 @@ frame on a level whose name contains `RAMKA` (for example `M_RAMKA` or
 - Measures the frame on the `RAMKA` level in every model.
 - Detects page size from:
   1. a sheet model's sheet definition (if present),
-  2. a selection set (manual override),
-  3. elements on a border/plot level (`RAMKA`),
+  2. elements on a frame level (`RAMKA`, `M_RAMKA`, ` _RAMKA`),
+  3. a selection set (fallback manual override),
   4. the largest closed element,
   5. the extents of all graphical elements.
 - Snaps to the exact A4 or A3 page when the measured frame is within 5 mm of
