@@ -40,6 +40,8 @@ match.
 4. Check that the output folder is writable. The macro writes to a `PDF`
    sub-folder next to the DGN.
 5. Check `PrintCorrectSize.log` in the output folder for the failing model.
+6. Close the PDF in Acrobat/Reader before re-running. A locked PDF cannot be
+   replaced; the log will say `cannot delete stale PDF`.
 
 The timeout is 180 seconds per PDF. A very large or raster-heavy model may
 need more time. Increase `PDF_TIMEOUT_SEC` in the source if needed.
@@ -89,6 +91,10 @@ Run `Preview` first. The source is shown in brackets:
 - `[EXTENTS]` — no border/sheet definition was found, so all geometry was
   used. Elements outside the page will make the page larger.
 
+The frame is measured as an axis-aligned rectangle. A frame rotated in the
+model is measured by its bounding box, which is larger than the frame. Use an
+axis-aligned frame for exact page sizes.
+
 ### Manual override
 
 For a design model, select the border (or all elements that define the page)
@@ -97,7 +103,8 @@ This is the quickest way to fix a wrong automatic detection.
 
 If the frame is inside a reference attachment rather than in the active model,
 the scan does not see it. Place the frame in the master model or select the
-page elements manually.
+page elements manually. A model that contains only references and no local
+graphics will be skipped as "no usable geometry".
 
 ## A4 sheets are still small, or large sheets are still clipped
 
