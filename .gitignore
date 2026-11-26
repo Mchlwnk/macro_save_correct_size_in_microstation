@@ -1,0 +1,16 @@
+# Local output and test files
+*.pdf
+*.log
+*.dgn
+*.dgnlib
+*.bak
+*.tmp
+
+# MicroStation / VBA lock files
+~$*
+*.lck
+
+# Editor / OS noise
+.DS_Store
+Thumbs.db
+desktop.ini

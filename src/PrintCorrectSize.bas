@@ -1,0 +1,867 @@
+Attribute VB_Name = "PrintCorrectSize"
+'==============================================================================
+' PrintCorrectSize
+'
+' MicroStation V8i VBA macro.
+'
+' Prints every non-empty model of the active DGN to a separate PDF and sets
+' the PDF page size to the size of that model/sheet. This avoids the usual
+' problem where one paper size is used for a whole batch: A4 sheets become
+' small and larger sheets are clipped.
+'
+' Page size is detected in this order:
+'   1. Sheet model definition (Model Properties > Sheet > Size)
+'   2. A selection set in the model (if anything is selected)  -> manual override
+'   3. Elements on a border/plot level (name contains one of BORDER_LEVEL_HINTS)
+'   4. Largest closed element in the model
+'   5. Extents of all graphical elements in the model
+'
+' The macro uses MicroStation's built-in Bentley PDF driver (pdf.pltcfg) and
+' the documented PRINT ... key-ins, so no external PDF printer is required.
+'
+' Tested target: MicroStation V8i (SELECTseries). VBA 6/7.
+'==============================================================================
+
+Option Explicit
+
+'------------------------------------------------------------------------------
+' User-editable settings
+'------------------------------------------------------------------------------
+
+' Bentley PDF plot driver. The file is searched through MS_PLTCFG_PATH.
+Private Const PDF_DRIVER As String = "pdf.pltcfg"
+
+' Output sub-folder created next to the DGN. Use "" to write next to the DGN.
+Private Const OUTPUT_SUBFOLDER As String = "PDF"
+
+' Level names (or parts of names) used for the sheet border. Case-insensitive.
+' Separate names with a comma. Leave "" to skip this detection step.
+Private Const BORDER_LEVEL_HINTS As String = "PLOT,BORDER,SHEET,RAMKA,ARKUSZ,FORMAT,OBRAMOWANIE"
+
+' If True, a selection set overrides border/extents detection. A sheet model's
+' sheet definition always wins.
+Private Const USE_SELECTION_AS_PAGE As Boolean = True
+
+' If a DGN contains sheet models, print only the sheet models. Design models
+' in such a file are usually the source geometry, not printable sheets.
+' Set to False to print every model.
+Private Const PRINT_ONLY_SHEETS_IF_PRESENT As Boolean = True
+
+' Sanity limits for a detected page (millimetres).
+Private Const MIN_PAGE_MM As Double = 40#
+Private Const MAX_PAGE_MM As Double = 10000#
+
+' How long to wait for one PDF before giving up (seconds).
+Private Const PDF_TIMEOUT_SEC As Long = 180
+
+' Write a small log next to the PDFs.
+Private Const WRITE_LOG As Boolean = True
+
+'------------------------------------------------------------------------------
+' Private types and module state
+'------------------------------------------------------------------------------
+
+Private Type BBox
+    Valid As Boolean
+    MinX As Double
+    MinY As Double
+    MaxX As Double
+    MaxY As Double
+End Type
+
+Private Type PageInfo
+    Valid As Boolean
+    Source As String
+    IsSheet As Boolean
+    WidthMM As Double
+    HeightMM As Double
+    Box As BBox
+End Type
+
+Private m_fso As Object
+Private m_logPath As String
+
+'==============================================================================
+' Public entry points
+'==============================================================================
+
+' Main entry point. Prints all models of the active DGN to separate PDFs.
+Public Sub Main()
+    PrintCorrectSize
+End Sub
+
+' Shows what would be printed, without creating PDFs.
+Public Sub Preview()
+    PreviewCorrectSize
+End Sub
+
+' Prints all models of the active DGN to separate PDFs.
+Public Sub PrintCorrectSize()
+    Dim df As DesignFile
+    Dim models As ModelReferences
+    Dim originalModel As ModelReference
+    Dim printModels() As ModelReference
+    Dim infos() As PageInfo
+    Dim names() As String
+    Dim paths() As String
+    Dim m As ModelReference
+    Dim i As Long
+    Dim n As Long
+    Dim outFolder As String
+    Dim summary As String
+    Dim result As String
+    Dim okCount As Long
+    Dim failCount As Long
+    Dim skipped As Long
+    Dim answer As VbMsgBoxResult
+
+    If Not Application.HasActiveDesignFile Then
+        MsgBox "Open a DGN file first.", vbExclamation, "PrintCorrectSize"
+        Exit Sub
+    End If
+
+    Set df = ActiveDesignFile
+    Set models = df.Models
+    If models.Count = 0 Then
+        MsgBox "The active DGN has no models.", vbExclamation, "PrintCorrectSize"
+        Exit Sub
+    End If
+
+    On Error Resume Next
+    Set m_fso = CreateObject("Scripting.FileSystemObject")
+    On Error GoTo 0
+    If m_fso Is Nothing Then
+        MsgBox "Cannot start Scripting.FileSystemObject.", vbExclamation, "PrintCorrectSize"
+        Exit Sub
+    End If
+
+    outFolder = GetOutputFolder(df)
+    If outFolder = "" Then Exit Sub
+
+    If Not EnsureFolder(outFolder) Then
+        MsgBox "Cannot create the output folder:" & vbCrLf & outFolder, vbExclamation, "PrintCorrectSize"
+        Exit Sub
+    End If
+
+    m_logPath = ""
+    If WRITE_LOG Then
+        m_logPath = m_fso.BuildPath(outFolder, "PrintCorrectSize.log")
+        On Error Resume Next
+        m_fso.CreateTextFile m_logPath, True
+        On Error GoTo 0
+    End If
+
+    Set originalModel = ActiveModelReference
+    BuildPrintList models, printModels, n
+
+    If n = 0 Then
+        MsgBox "No printable models found.", vbExclamation, "PrintCorrectSize"
+        Exit Sub
+    End If
+
+    ReDim infos(0 To n - 1)
+    ReDim names(0 To n - 1)
+    ReDim paths(0 To n - 1)
+
+    ' Scan models. Activation is needed for the selection set and for a
+    ' reliable per-model scan in V8i.
+    For i = 1 To n
+        Set m = printModels(i - 1)
+        m.Activate
+        names(i - 1) = m.Name
+        infos(i - 1) = GetPageInfo(m)
+        paths(i - 1) = MakePdfPath(df, m, n, outFolder)
+    Next i
+    originalModel.Activate
+
+    ' Build a short report and ask for confirmation.
+    summary = "Active DGN: " & df.FullName & vbCrLf & _
+              "Output: " & outFolder & vbCrLf & vbCrLf
+
+    For i = 0 To n - 1
+        If infos(i).Valid Then
+            summary = summary & Format$(i + 1, "00") & ". " & names(i) & _
+                      "  ->  " & Format$(infos(i).WidthMM, "0.0") & " x " & _
+                      Format$(infos(i).HeightMM, "0.0") & " mm  [" & infos(i).Source & "]" & vbCrLf
+        Else
+            summary = summary & Format$(i + 1, "00") & ". " & names(i) & _
+                      "  ->  SKIPPED (no usable geometry)" & vbCrLf
+        End If
+    Next i
+
+    summary = summary & vbCrLf & "Create these PDF files?"
+    answer = MsgBox(summary, vbOKCancel + vbInformation, "PrintCorrectSize")
+    If answer <> vbOK Then Exit Sub
+
+    ' One-time print setup.
+    CadInputQueue.SendKeyin "PRINT DRIVER " & PDF_DRIVER
+    CadInputQueue.SendKeyin "PRINT DESTINATION PLOTFILE"
+    CadInputQueue.SendKeyin "PRINT COLORMODE COLOR"
+    CadInputQueue.SendKeyin "PRINT AUTOCENTER ON"
+
+    LogLine "==== " & Format$(Now, "yyyy-mm-dd hh:nn:ss") & " ===="
+    LogLine "DGN: " & df.FullName
+    LogLine "Driver: " & PDF_DRIVER
+
+    For i = 0 To n - 1
+        If infos(i).Valid Then
+            Set m = printModels(i)
+            m.Activate
+
+            If PrintOneModel(m, infos(i), paths(i)) Then
+                okCount = okCount + 1
+                LogLine "OK   " & names(i) & " | " & _
+                        Format$(infos(i).WidthMM, "0.0") & "x" & Format$(infos(i).HeightMM, "0.0") & _
+                        " mm | " & infos(i).Source & " | " & paths(i)
+            Else
+                failCount = failCount + 1
+                LogLine "FAIL " & names(i) & " | " & paths(i)
+            End If
+        Else
+            skipped = skipped + 1
+            LogLine "SKIP " & names(i)
+        End If
+    Next i
+
+    ' Leave the file as we found it.
+    On Error Resume Next
+    ActiveDesignFile.Fence.Undefine
+    On Error GoTo 0
+    originalModel.Activate
+
+    result = "Done." & vbCrLf & vbCrLf & _
+             "Created: " & okCount & vbCrLf & _
+             "Failed:  " & failCount & vbCrLf & _
+             "Skipped: " & skipped & vbCrLf & vbCrLf & _
+             "Folder: " & outFolder
+
+    If failCount > 0 Then
+        result = result & vbCrLf & vbCrLf & _
+                 "Check PrintCorrectSize.log and make sure the Bentley PDF driver " & _
+                 "(" & PDF_DRIVER & ") is installed and allows paper size editing."
+    End If
+
+    MsgBox result, IIf(failCount > 0, vbExclamation, vbInformation), "PrintCorrectSize"
+End Sub
+
+' Shows the detected page sizes without printing.
+Public Sub PreviewCorrectSize()
+    Dim df As DesignFile
+    Dim models As ModelReferences
+    Dim printModels() As ModelReference
+    Dim m As ModelReference
+    Dim originalModel As ModelReference
+    Dim pi As PageInfo
+    Dim i As Long
+    Dim n As Long
+    Dim report As String
+
+    If Not Application.HasActiveDesignFile Then
+        MsgBox "Open a DGN file first.", vbExclamation, "PrintCorrectSize"
+        Exit Sub
+    End If
+
+    Set df = ActiveDesignFile
+    Set models = df.Models
+    If models.Count = 0 Then
+        MsgBox "The active DGN has no models.", vbExclamation, "PrintCorrectSize"
+        Exit Sub
+    End If
+
+    Set originalModel = ActiveModelReference
+    BuildPrintList models, printModels, n
+
+    If n = 0 Then
+        MsgBox "No printable models found.", vbExclamation, "PrintCorrectSize"
+        Exit Sub
+    End If
+
+    report = "Active DGN: " & df.FullName & vbCrLf & vbCrLf
+
+    For i = 1 To n
+        Set m = printModels(i - 1)
+        m.Activate
+        pi = GetPageInfo(m)
+
+        report = report & Format$(i, "00") & ". " & m.Name & vbCrLf
+        If pi.Valid Then
+            report = report & "     " & Format$(pi.WidthMM, "0.0") & " x " & _
+                     Format$(pi.HeightMM, "0.0") & " mm  [" & pi.Source & "]" & vbCrLf
+        Else
+            report = report & "     SKIPPED - no usable geometry" & vbCrLf
+        End If
+    Next i
+    originalModel.Activate
+
+    MsgBox report, vbInformation, "PrintCorrectSize - preview"
+End Sub
+
+'==============================================================================
+' Model selection
+'==============================================================================
+
+Private Sub BuildPrintList(ByVal models As ModelReferences, _
+                           ByRef result() As ModelReference, ByRef count As Long)
+    Dim hasSheet As Boolean
+    Dim i As Long
+
+    hasSheet = False
+    For i = 1 To models.Count
+        If models(i).Type = msdModelTypeSheet Then
+            hasSheet = True
+            Exit For
+        End If
+    Next i
+
+    ReDim result(0 To models.Count - 1)
+    count = 0
+
+    For i = 1 To models.Count
+        If ShouldPrintModel(models(i), hasSheet) Then
+            Set result(count) = models(i)
+            count = count + 1
+        End If
+    Next i
+
+    If count = 0 Then ReDim result(0 To 0)
+End Sub
+
+Private Function ShouldPrintModel(ByVal m As ModelReference, ByVal hasSheet As Boolean) As Boolean
+    If hasSheet And PRINT_ONLY_SHEETS_IF_PRESENT Then
+        ShouldPrintModel = (m.Type = msdModelTypeSheet)
+    Else
+        ShouldPrintModel = True
+    End If
+End Function
+
+'==============================================================================
+' Page-size detection
+'==============================================================================
+
+Private Function GetPageInfo(ByVal m As ModelReference) As PageInfo
+    Dim pi As PageInfo
+    Dim sd As SheetDefinition
+    Dim b As BBox
+
+    pi.Valid = False
+    pi.Source = ""
+    pi.IsSheet = (m.Type = msdModelTypeSheet)
+    pi.Box.Valid = False
+
+    ' 1. Sheet model: the sheet definition is the authoritative page size.
+    If pi.IsSheet Then
+        On Error Resume Next
+        Set sd = m.GetSheetDefinition
+        If Err.Number = 0 Then
+            If Not sd Is Nothing Then
+                If sd.Width > 0# And sd.Height > 0# Then
+                    pi.WidthMM = UORsToMM(m, sd.Width)
+                    pi.HeightMM = UORsToMM(m, sd.Height)
+                    pi.Source = "SHEET"
+                    pi.Valid = IsSanePage(pi.WidthMM, pi.HeightMM)
+                End If
+            End If
+        End If
+        On Error GoTo 0
+        If pi.Valid Then
+            GetPageInfo = pi
+            Exit Function
+        End If
+
+        ' A sheet model without a usable sheet definition must be printed
+        ' from a fence, like a normal design model.
+        pi.IsSheet = False
+    End If
+
+    ' 2. Manual override: selected elements.
+    If USE_SELECTION_AS_PAGE Then
+        On Error Resume Next
+        If m.AnyElementsSelected Then
+            b = BBoxFromEnumerator(m.GetSelectedElements)
+            If b.Valid Then
+                pi.WidthMM = UORsToMM(m, b.MaxX - b.MinX)
+                pi.HeightMM = UORsToMM(m, b.MaxY - b.MinY)
+                If IsSanePage(pi.WidthMM, pi.HeightMM) Then
+                    pi.Box = b
+                    pi.Source = "SELECTION"
+                    pi.Valid = True
+                    GetPageInfo = pi
+                    Exit Function
+                End If
+            End If
+        End If
+        On Error GoTo 0
+    End If
+
+    ' 3. Elements on a border/plot level.
+    If Len(Trim$(BORDER_LEVEL_HINTS)) > 0 Then
+        On Error Resume Next
+        b = BBoxFromBorderLevels(m)
+        If Err.Number = 0 And b.Valid Then
+            pi.WidthMM = UORsToMM(m, b.MaxX - b.MinX)
+            pi.HeightMM = UORsToMM(m, b.MaxY - b.MinY)
+            If IsSanePage(pi.WidthMM, pi.HeightMM) Then
+                pi.Box = b
+                pi.Source = "BORDER LEVEL"
+                pi.Valid = True
+                GetPageInfo = pi
+                Exit Function
+            End If
+        End If
+        On Error GoTo 0
+    End If
+
+    ' 4. Largest closed element (usually the sheet border).
+    On Error Resume Next
+    b = BBoxFromLargestClosedElement(m)
+    If Err.Number = 0 And b.Valid Then
+        pi.WidthMM = UORsToMM(m, b.MaxX - b.MinX)
+        pi.HeightMM = UORsToMM(m, b.MaxY - b.MinY)
+        If IsSanePage(pi.WidthMM, pi.HeightMM) Then
+            pi.Box = b
+            pi.Source = "CLOSED ELEMENT"
+            pi.Valid = True
+            GetPageInfo = pi
+            Exit Function
+        End If
+    End If
+    On Error GoTo 0
+
+    ' 5. Fallback: all graphical elements.
+    On Error Resume Next
+    b = BBoxFromAllElements(m)
+    If Err.Number = 0 And b.Valid Then
+        pi.WidthMM = UORsToMM(m, b.MaxX - b.MinX)
+        pi.HeightMM = UORsToMM(m, b.MaxY - b.MinY)
+        If IsSanePage(pi.WidthMM, pi.HeightMM) Then
+            pi.Box = b
+            pi.Source = "EXTENTS"
+            pi.Valid = True
+        End If
+    End If
+    On Error GoTo 0
+
+    GetPageInfo = pi
+End Function
+
+Private Function BBoxFromEnumerator(ByVal ee As ElementEnumerator) As BBox
+    Dim b As BBox
+    Dim el As Element
+    Dim r As Range3d
+
+    Do While ee.MoveNext
+        Set el = ee.Current
+        If el.IsGraphical Then
+            r = el.Range(False)
+            BBoxAdd b, r
+        End If
+    Loop
+
+    BBoxFromEnumerator = b
+End Function
+
+Private Function BBoxFromBorderLevels(ByVal m As ModelReference) As BBox
+    Dim b As BBox
+    Dim ee As ElementEnumerator
+    Dim el As Element
+    Dim r As Range3d
+    Dim levelName As String
+
+    Set ee = m.Scan(Nothing)
+    Do While ee.MoveNext
+        Set el = ee.Current
+        If el.IsGraphical Then
+            levelName = ""
+            On Error Resume Next
+            levelName = el.Level.Name
+            On Error GoTo 0
+
+            If MatchesAny(levelName, BORDER_LEVEL_HINTS) Then
+                r = el.Range(False)
+                BBoxAdd b, r
+            End If
+        End If
+    Loop
+
+    BBoxFromBorderLevels = b
+End Function
+
+Private Function BBoxFromLargestClosedElement(ByVal m As ModelReference) As BBox
+    Dim b As BBox
+    Dim best As BBox
+    Dim bestArea As Double
+    Dim ee As ElementEnumerator
+    Dim el As Element
+    Dim r As Range3d
+    Dim area As Double
+
+    bestArea = 0#
+    Set ee = m.Scan(Nothing)
+    Do While ee.MoveNext
+        Set el = ee.Current
+        If el.IsGraphical Then
+            If el.IsClosedElement Then
+                r = el.Range(False)
+                area = (r.High.X - r.Low.X) * (r.High.Y - r.Low.Y)
+                If area > bestArea Then
+                    bestArea = area
+                    BBoxInit best
+                    BBoxAdd best, r
+                End If
+            End If
+        End If
+    Loop
+
+    BBoxFromLargestClosedElement = best
+End Function
+
+Private Function BBoxFromAllElements(ByVal m As ModelReference) As BBox
+    Dim b As BBox
+    Dim ee As ElementEnumerator
+    Dim el As Element
+    Dim r As Range3d
+
+    Set ee = m.Scan(Nothing)
+    Do While ee.MoveNext
+        Set el = ee.Current
+        If el.IsGraphical Then
+            r = el.Range(False)
+            BBoxAdd b, r
+        End If
+    Loop
+
+    BBoxFromAllElements = b
+End Function
+
+Private Sub BBoxInit(ByRef b As BBox)
+    b.Valid = False
+    b.MinX = 0#
+    b.MinY = 0#
+    b.MaxX = 0#
+    b.MaxY = 0#
+End Sub
+
+Private Sub BBoxAdd(ByRef b As BBox, ByRef r As Range3d)
+    ' Ignore null/invalid ranges.
+    If r.High.X < r.Low.X Then Exit Sub
+    If r.High.Y < r.Low.Y Then Exit Sub
+
+    If Not b.Valid Then
+        b.MinX = r.Low.X
+        b.MinY = r.Low.Y
+        b.MaxX = r.High.X
+        b.MaxY = r.High.Y
+        b.Valid = True
+    Else
+        If r.Low.X < b.MinX Then b.MinX = r.Low.X
+        If r.Low.Y < b.MinY Then b.MinY = r.Low.Y
+        If r.High.X > b.MaxX Then b.MaxX = r.High.X
+        If r.High.Y > b.MaxY Then b.MaxY = r.High.Y
+    End If
+End Sub
+
+Private Function IsSanePage(ByVal wMM As Double, ByVal hMM As Double) As Boolean
+    IsSanePage = False
+    If wMM < MIN_PAGE_MM Or hMM < MIN_PAGE_MM Then Exit Function
+    If wMM > MAX_PAGE_MM Or hMM > MAX_PAGE_MM Then Exit Function
+    IsSanePage = True
+End Function
+
+Private Function UORsToMM(ByVal m As ModelReference, ByVal uors As Double) As Double
+    Dim mu As MeasurementUnit
+    Dim masterUnits As Double
+    Dim metres As Double
+
+    If m.UORsPerMasterUnit = 0# Then
+        UORsToMM = 0#
+        Exit Function
+    End If
+
+    mu = m.MasterUnit
+    masterUnits = uors / m.UORsPerMasterUnit
+
+    If mu.UnitsPerBaseNumerator = 0# Then
+        UORsToMM = 0#
+        Exit Function
+    End If
+
+    metres = masterUnits * mu.UnitsPerBaseDenominator / mu.UnitsPerBaseNumerator
+    UORsToMM = metres * 1000#
+End Function
+
+'==============================================================================
+' Printing
+'==============================================================================
+
+Private Function PrintOneModel(ByVal m As ModelReference, ByRef pi As PageInfo, _
+                               ByVal pdfPath As String) As Boolean
+    Dim shortMM As Double
+    Dim longMM As Double
+    Dim orientation As String
+    Dim quotedPath As String
+    Dim pageBox As BBox
+
+    PrintOneModel = False
+    On Error GoTo errHandler
+
+    ' Select the print area first. For a sheet model this also makes
+    ' MicroStation use the sheet boundary.
+    If pi.IsSheet Then
+        CadInputQueue.SendKeyin "PRINT BOUNDARY SHEET"
+    Else
+        pageBox = pi.Box
+        If Not DefineFenceForPage(m, pageBox) Then
+            LogLine "  cannot define fence for " & m.Name
+            Exit Function
+        End If
+        CadInputQueue.SendKeyin "PRINT BOUNDARY FENCE"
+    End If
+
+    ' A Bentley driver uses a portrait form plus an orientation. Set the
+    ' short side as X and the long side as Y, then rotate if needed.
+    shortMM = pi.WidthMM
+    longMM = pi.HeightMM
+    If shortMM > longMM Then
+        shortMM = pi.HeightMM
+        longMM = pi.WidthMM
+    End If
+
+    If pi.WidthMM > pi.HeightMM Then
+        orientation = "LANDSCAPE"
+    Else
+        orientation = "PORTRAIT"
+    End If
+
+    CadInputQueue.SendKeyin "PRINT UNITS MM"
+    ' Set the form while it is in portrait orientation, then rotate.
+    CadInputQueue.SendKeyin "PRINT ORIENTATION PORTRAIT"
+    CadInputQueue.SendKeyin "PRINT XFORM " & KeyinNumber(shortMM) & " MM"
+    CadInputQueue.SendKeyin "PRINT YFORM " & KeyinNumber(longMM) & " MM"
+    CadInputQueue.SendKeyin "PRINT ORIENTATION " & orientation
+    CadInputQueue.SendKeyin "PRINT AUTOCENTER ON"
+    CadInputQueue.SendKeyin "PRINT MAXIMIZE"
+
+    ' Remove a stale file so a timeout cannot be mistaken for success.
+    On Error Resume Next
+    If m_fso.FileExists(pdfPath) Then m_fso.DeleteFile pdfPath, True
+    On Error GoTo errHandler
+    If m_fso.FileExists(pdfPath) Then
+        LogLine "  cannot delete stale PDF: " & pdfPath
+        Exit Function
+    End If
+
+    quotedPath = Chr$(34) & pdfPath & Chr$(34)
+    CadInputQueue.SendKeyin "PRINT EXECUTE " & quotedPath
+
+    PrintOneModel = WaitForPdf(pdfPath, PDF_TIMEOUT_SEC)
+    Exit Function
+
+errHandler:
+    LogLine "  error " & Err.Number & ": " & Err.Description
+    PrintOneModel = False
+End Function
+
+Private Function DefineFenceForPage(ByVal m As ModelReference, ByRef b As BBox) As Boolean
+    Dim fence As Fence
+    Dim pts(0 To 3) As Point3d
+    Dim scaleToMaster As Double
+
+    DefineFenceForPage = False
+    If Not b.Valid Then Exit Function
+    If m.UORsPerMasterUnit = 0# Then Exit Function
+
+    scaleToMaster = 1# / m.UORsPerMasterUnit
+
+    pts(0).X = b.MinX * scaleToMaster
+    pts(0).Y = b.MinY * scaleToMaster
+    pts(0).Z = 0#
+
+    pts(1).X = b.MaxX * scaleToMaster
+    pts(1).Y = b.MinY * scaleToMaster
+    pts(1).Z = 0#
+
+    pts(2).X = b.MaxX * scaleToMaster
+    pts(2).Y = b.MaxY * scaleToMaster
+    pts(2).Z = 0#
+
+    pts(3).X = b.MinX * scaleToMaster
+    pts(3).Y = b.MaxY * scaleToMaster
+    pts(3).Z = 0#
+
+    On Error Resume Next
+    Set fence = ActiveDesignFile.Fence
+    fence.Undefine
+    Err.Clear
+    fence.DefineFromModelPoints 1, pts
+    If Err.Number <> 0 Then
+        Err.Clear
+        Exit Function
+    End If
+    On Error GoTo 0
+
+    DefineFenceForPage = True
+End Function
+
+Private Function WaitForPdf(ByVal path As String, ByVal timeoutSec As Long) As Boolean
+    Dim started As Double
+    Dim lastSize As Double
+    Dim stableCount As Long
+    Dim sizeNow As Double
+
+    WaitForPdf = False
+    started = Timer
+    lastSize = -1#
+    stableCount = 0
+
+    Do
+        DoEvents
+
+        If m_fso.FileExists(path) Then
+            On Error Resume Next
+            sizeNow = m_fso.GetFile(path).Size
+            On Error GoTo 0
+
+            If sizeNow > 0# Then
+                If sizeNow = lastSize Then
+                    stableCount = stableCount + 1
+                Else
+                    stableCount = 0
+                    lastSize = sizeNow
+                End If
+
+                ' File size unchanged for ~0.6 s -> assume the PDF is complete.
+                If stableCount >= 3 Then
+                    WaitForPdf = True
+                    Exit Function
+                End If
+            End If
+        End If
+
+        If ElapsedSeconds(started) > timeoutSec Then Exit Function
+        Pause 0.2
+    Loop
+End Function
+
+Private Sub Pause(ByVal seconds As Double)
+    Dim started As Double
+    started = Timer
+    Do While ElapsedSeconds(started) < seconds
+        DoEvents
+    Loop
+End Sub
+
+Private Function ElapsedSeconds(ByVal started As Double) As Double
+    Dim nowValue As Double
+    nowValue = Timer
+    If nowValue >= started Then
+        ElapsedSeconds = nowValue - started
+    Else
+        ' Midnight rollover.
+        ElapsedSeconds = (86400# - started) + nowValue
+    End If
+End Function
+
+'==============================================================================
+' Files, names, small helpers
+'==============================================================================
+
+Private Function GetOutputFolder(ByVal df As DesignFile) As String
+    Dim dgnFolder As String
+    Dim outFolder As String
+
+    dgnFolder = m_fso.GetParentFolderName(df.FullName)
+    If Len(OUTPUT_SUBFOLDER) = 0 Then
+        outFolder = dgnFolder
+    Else
+        outFolder = m_fso.BuildPath(dgnFolder, OUTPUT_SUBFOLDER)
+    End If
+
+    GetOutputFolder = outFolder
+End Function
+
+Private Function EnsureFolder(ByVal folder As String) As Boolean
+    EnsureFolder = False
+    On Error Resume Next
+    If m_fso.FolderExists(folder) Then
+        EnsureFolder = True
+    Else
+        m_fso.CreateFolder folder
+        EnsureFolder = m_fso.FolderExists(folder)
+    End If
+    On Error GoTo 0
+End Function
+
+Private Function MakePdfPath(ByVal df As DesignFile, ByVal m As ModelReference, _
+                             ByVal modelCount As Long, ByVal outFolder As String) As String
+    Dim baseName As String
+    Dim fileName As String
+
+    baseName = m_fso.GetBaseName(df.FullName)
+
+    If modelCount = 1 Then
+        fileName = baseName & ".pdf"
+    Else
+        fileName = baseName & "_" & SanitizeFileName(m.Name) & ".pdf"
+    End If
+
+    MakePdfPath = m_fso.BuildPath(outFolder, fileName)
+End Function
+
+Private Function SanitizeFileName(ByVal s As String) As String
+    Dim badChars As Variant
+    Dim i As Long
+    Dim ch As String
+    Dim result As String
+
+    badChars = Array("\", "/", ":", "*", "?", Chr$(34), "<", ">", "|")
+    result = s
+
+    For i = LBound(badChars) To UBound(badChars)
+        result = Replace(result, CStr(badChars(i)), "_")
+    Next i
+
+    result = Trim$(result)
+    If Len(result) = 0 Then result = "model"
+    If Len(result) > 120 Then result = Left$(result, 120)
+    SanitizeFileName = result
+End Function
+
+Private Function KeyinNumber(ByVal value As Double) As String
+    Dim s As String
+    s = Format$(value, "0.000")
+    s = Replace(s, ",", ".")
+    KeyinNumber = s
+End Function
+
+Private Function MatchesAny(ByVal text As String, ByVal commaList As String) As Boolean
+    Dim parts As Variant
+    Dim i As Long
+    Dim token As String
+
+    MatchesAny = False
+    If Len(text) = 0 Then Exit Function
+
+    parts = Split(commaList, ",")
+    For i = LBound(parts) To UBound(parts)
+        token = Trim$(CStr(parts(i)))
+        If Len(token) > 0 Then
+            If InStr(1, text, token, vbTextCompare) > 0 Then
+                MatchesAny = True
+                Exit Function
+            End If
+        End If
+    Next i
+End Function
+
+Private Sub LogLine(ByVal text As String)
+    Dim ts As Object
+
+    If Len(m_logPath) = 0 Then Exit Sub
+    On Error Resume Next
+    Set ts = m_fso.OpenTextFile(m_logPath, 8, True)
+    If Not ts Is Nothing Then
+        ts.WriteLine text
+        ts.Close
+    End If
+    On Error GoTo 0
+End Sub
