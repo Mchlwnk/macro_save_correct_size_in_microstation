@@ -22,7 +22,7 @@ Attribute VB_Name = "PrintCorrectSize"
 ' The macro uses MicroStation's built-in Bentley PDF driver (pdf.pltcfg) and
 ' the documented PRINT ... key-ins, so no external PDF printer is required.
 '
-' Tested target: MicroStation V8i (SELECTseries). VBA 6/7.
+' Target: MicroStation V8i (SELECTseries). VBA 6/7.
 '==============================================================================
 
 Option Explicit
@@ -146,9 +146,15 @@ Public Sub PrintCorrectSize()
         Exit Sub
     End If
 
+    If Len(df.FullName) = 0 Then
+        MsgBox "Save the DGN file before printing.", vbExclamation, "PrintCorrectSize"
+        Exit Sub
+    End If
+
     On Error Resume Next
     Set m_fso = CreateObject("Scripting.FileSystemObject")
     On Error GoTo 0
+    Err.Clear
     If m_fso Is Nothing Then
         MsgBox "Cannot start Scripting.FileSystemObject.", vbExclamation, "PrintCorrectSize"
         Exit Sub
@@ -180,6 +186,7 @@ Public Sub PrintCorrectSize()
         On Error Resume Next
         m_fso.CreateTextFile m_logPath, True
         On Error GoTo 0
+        Err.Clear
     End If
 
     Set originalModel = ActiveModelReference
@@ -401,6 +408,7 @@ Private Sub GetPageInfo(ByVal m As ModelReference, ByRef pi As PageInfo)
     ' 1. Sheet model: the sheet definition is the authoritative page size.
     If pi.IsSheet Then
         On Error Resume Next
+        Err.Clear
         Set sd = m.GetSheetDefinition
         If Err.Number = 0 Then
             If Not sd Is Nothing Then
@@ -410,6 +418,7 @@ Private Sub GetPageInfo(ByVal m As ModelReference, ByRef pi As PageInfo)
             End If
         End If
         On Error GoTo 0
+        Err.Clear
         If pi.Valid Then Exit Sub
 
         ' A sheet model without a usable sheet definition must be printed
@@ -421,6 +430,7 @@ Private Sub GetPageInfo(ByVal m As ModelReference, ByRef pi As PageInfo)
     '    models with a frame on M_RAMKA or _RAMKA.
     If Len(Trim$(BORDER_LEVEL_HINTS)) > 0 Then
         On Error Resume Next
+        Err.Clear
         b = BBoxFromBorderLevels(m)
         If Err.Number = 0 And b.Valid Then
             SetPageSize pi, UORsToMM(m, b.MaxX - b.MinX), _
@@ -431,11 +441,13 @@ Private Sub GetPageInfo(ByVal m As ModelReference, ByRef pi As PageInfo)
             End If
         End If
         On Error GoTo 0
+        Err.Clear
     End If
 
     ' 3. Manual override: selected elements.
     If USE_SELECTION_AS_PAGE Then
         On Error Resume Next
+        Err.Clear
         If m.AnyElementsSelected Then
             b = BBoxFromEnumerator(m.GetSelectedElements)
             If b.Valid Then
@@ -448,10 +460,12 @@ Private Sub GetPageInfo(ByVal m As ModelReference, ByRef pi As PageInfo)
             End If
         End If
         On Error GoTo 0
+        Err.Clear
     End If
 
     ' 4. Largest closed element (usually the sheet border).
     On Error Resume Next
+    Err.Clear
     b = BBoxFromLargestClosedElement(m)
     If Err.Number = 0 And b.Valid Then
         SetPageSize pi, UORsToMM(m, b.MaxX - b.MinX), _
@@ -462,9 +476,11 @@ Private Sub GetPageInfo(ByVal m As ModelReference, ByRef pi As PageInfo)
         End If
     End If
     On Error GoTo 0
+    Err.Clear
 
     ' 5. Fallback: all graphical elements.
     On Error Resume Next
+    Err.Clear
     b = BBoxFromAllElements(m)
     If Err.Number = 0 And b.Valid Then
         SetPageSize pi, UORsToMM(m, b.MaxX - b.MinX), _
@@ -474,7 +490,7 @@ Private Sub GetPageInfo(ByVal m As ModelReference, ByRef pi As PageInfo)
         End If
     End If
     On Error GoTo 0
-
+    Err.Clear
 End Sub
 
 Private Function BBoxFromEnumerator(ByVal ee As ElementEnumerator) As BBox
@@ -510,8 +526,10 @@ Private Function BBoxFromBorderLevels(ByVal m As ModelReference) As BBox
         If el.IsGraphical Then
             levelName = ""
             On Error Resume Next
+            Err.Clear
             levelName = el.Level.Name
             On Error GoTo 0
+            Err.Clear
 
             If MatchesAny(levelName, BORDER_LEVEL_HINTS) Then
                 r = el.Range(False)
@@ -857,6 +875,7 @@ Private Function PrintOneModel(ByVal m As ModelReference, ByRef pi As PageInfo, 
     On Error Resume Next
     If m_fso.FileExists(pdfPath) Then m_fso.DeleteFile pdfPath, True
     On Error GoTo errHandler
+    Err.Clear
     If m_fso.FileExists(pdfPath) Then
         LogLine "  cannot delete stale PDF: " & pdfPath
         Exit Function
@@ -932,8 +951,10 @@ Private Function WaitForPdf(ByVal path As String, ByVal timeoutSec As Long) As B
 
         If m_fso.FileExists(path) Then
             On Error Resume Next
+            Err.Clear
             sizeNow = m_fso.GetFile(path).Size
             On Error GoTo 0
+            Err.Clear
 
             If sizeNow > 0# Then
                 If sizeNow = lastSize Then
@@ -996,10 +1017,12 @@ Private Function PrintDriverExists(ByVal driverName As String) As Boolean
 
     On Error Resume Next
     If Not ActiveWorkspace.IsConfigurationVariableDefined("MS_PLTCFG_PATH") Then
+        Err.Clear
         Exit Function
     End If
     paths = ActiveWorkspace.ConfigurationVariableValue("MS_PLTCFG_PATH")
     On Error GoTo 0
+    Err.Clear
 
     parts = Split(paths, ";")
     For i = LBound(parts) To UBound(parts)
@@ -1069,6 +1092,7 @@ Private Function MakeKeyinPath(ByVal path As String) As String
     On Error Resume Next
     shortFolder = m_fso.GetFolder(folder).ShortPath
     On Error GoTo 0
+    Err.Clear
     If Len(shortFolder) = 0 Then shortFolder = folder
 
     MakeKeyinPath = m_fso.BuildPath(shortFolder, fileName)
