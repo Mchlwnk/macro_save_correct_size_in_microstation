@@ -127,6 +127,7 @@ Public Sub PrintCorrectSize()
     Dim i As Long
     Dim n As Long
     Dim outFolder As String
+    Dim driverArg As String
     Dim summary As String
     Dim result As String
     Dim okCount As Long
@@ -239,7 +240,9 @@ Public Sub PrintCorrectSize()
     If answer <> vbOK Then Exit Sub
 
     ' One-time print setup.
-    CadInputQueue.SendKeyin "PRINT DRIVER " & PDF_DRIVER
+    driverArg = PDF_DRIVER
+    If InStr(driverArg, " ") > 0 Then driverArg = Chr$(34) & driverArg & Chr$(34)
+    CadInputQueue.SendKeyin "PRINT DRIVER " & driverArg
     CadInputQueue.SendKeyin "PRINT DESTINATION PLOTFILE"
     CadInputQueue.SendKeyin "PRINT COLORMODE COLOR"
     CadInputQueue.SendKeyin "PRINT AUTOCENTER ON"
