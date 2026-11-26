@@ -175,7 +175,8 @@ Public Sub PrintCorrectSize()
 
     m_logPath = ""
     If WRITE_LOG Then
-        m_logPath = m_fso.BuildPath(outFolder, "PrintCorrectSize.log")
+        m_logPath = m_fso.BuildPath(outFolder, _
+                    "PrintCorrectSize_" & SanitizeFileName(m_fso.GetBaseName(df.FullName)) & ".log")
         On Error Resume Next
         m_fso.CreateTextFile m_logPath, True
         On Error GoTo 0
@@ -280,7 +281,7 @@ Public Sub PrintCorrectSize()
 
     If failCount > 0 Then
         result = result & vbCrLf & vbCrLf & _
-                 "Check PrintCorrectSize.log and make sure the Bentley PDF driver " & _
+                 "Check the PrintCorrectSize log and make sure the Bentley PDF driver " & _
                  "(" & PDF_DRIVER & ") is installed and allows paper size editing."
     End If
 

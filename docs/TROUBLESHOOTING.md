@@ -39,7 +39,7 @@ match.
    not in the macro.
 4. Check that the output folder is writable. The macro writes to a `PDF`
    sub-folder next to the DGN.
-5. Check `PrintCorrectSize.log` in the output folder for the failing model.
+5. Check `PrintCorrectSize_<dgn>.log` in the output folder for the failing model.
 6. Close the PDF in Acrobat/Reader before re-running. A locked PDF cannot be
    replaced; the log will say `cannot delete stale PDF`.
 

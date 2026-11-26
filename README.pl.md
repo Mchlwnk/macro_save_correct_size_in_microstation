@@ -34,7 +34,7 @@ albo ` _RAMKA`).
   wymiary, np. 350 × 500 mm).
 - Korzysta z wbudowanego sterownika Bentley PDF (`pdf.pltcfg`), więc nie
   trzeba instalować zewnętrznego PDF Creatora.
-- Zapisuje `PrintCorrectSize.log` z rozmiarami i wynikami.
+- Zapisuje `PrintCorrectSize_<dgn>.log` z rozmiarami i wynikami.
 - Ma tryb podglądu, który tylko pokazuje wykryte rozmiary.
 
 ## Wymagania
@@ -134,7 +134,7 @@ Wszystkie ustawienia to stałe na początku `PrintCorrectSize.bas`:
 | `MIN_PAGE_MM` | `40` | Odrzucaj wykryte strony mniejsze niż to. |
 | `MAX_PAGE_MM` | `10000` | Odrzucaj wykryte strony większe niż to. |
 | `PDF_TIMEOUT_SEC` | `180` | Czas oczekiwania na jeden PDF. |
-| `WRITE_LOG` | `True` | Zapisz `PrintCorrectSize.log`. |
+| `WRITE_LOG` | `True` | Zapisz log obok PDF-ów. |
 
 ## Ważne
 

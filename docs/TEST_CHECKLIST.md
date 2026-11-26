@@ -27,7 +27,7 @@ on production drawings.
 - [ ] Run `PrintCorrectSize.Main`.
 - [ ] Confirm the model list.
 - [ ] The macro finishes without a runtime error dialog.
-- [ ] `PrintCorrectSize.log` exists in the output folder.
+- [ ] `PrintCorrectSize_<dgn>.log` exists in the output folder.
 - [ ] The log reports `OK` for every expected model.
 
 ## PDF verification

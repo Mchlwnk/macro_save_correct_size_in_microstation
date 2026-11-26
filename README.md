@@ -33,7 +33,7 @@ frame on a level whose name contains `RAMKA` (for example `M_RAMKA` or
   such as 350 × 500 mm).
 - Uses MicroStation's built-in Bentley PDF driver (`pdf.pltcfg`), so no
   external PDF printer is required.
-- Writes a `PrintCorrectSize.log` with the detected sizes and results.
+- Writes a `PrintCorrectSize_<dgn>.log` with the detected sizes and results.
 - Provides a preview mode that only lists the detected sizes.
 
 ## Requirements
@@ -135,7 +135,7 @@ All settings are constants at the top of `PrintCorrectSize.bas`:
 | `MIN_PAGE_MM` | `40` | Reject detected pages smaller than this. |
 | `MAX_PAGE_MM` | `10000` | Reject detected pages larger than this. |
 | `PDF_TIMEOUT_SEC` | `180` | Wait time for one PDF. |
-| `WRITE_LOG` | `True` | Write `PrintCorrectSize.log`. |
+| `WRITE_LOG` | `True` | Write a log next to the PDFs. |
 
 ## Important notes
 
