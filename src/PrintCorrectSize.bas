@@ -4,17 +4,20 @@ Attribute VB_Name = "PrintCorrectSize"
 '
 ' MicroStation V8i VBA macro.
 '
-' Prints every non-empty model of the active DGN to a separate PDF and sets
-' the PDF page size to the size of that model/sheet. This avoids the usual
-' problem where one paper size is used for a whole batch: A4 sheets become
-' small and larger sheets are clipped.
+' Prints every printable model of the active DGN to a separate PDF and sets
+' the PDF page size to the size of that model. This avoids the usual problem
+' where one paper size is used for a whole batch: A4 sheets become small and
+' larger sheets are clipped.
 '
 ' Page size is detected in this order:
 '   1. Sheet model definition (Model Properties > Sheet > Size)
-'   2. A selection set in the model (if anything is selected)  -> manual override
-'   3. Elements on a border/plot level (name contains one of BORDER_LEVEL_HINTS)
+'   2. Elements on a frame level (name contains one of BORDER_LEVEL_HINTS)
+'   3. A selection set in the model (if anything is selected)  -> fallback override
 '   4. Largest closed element in the model
 '   5. Extents of all graphical elements in the model
+'
+' A measured page within STANDARD_SIZE_TOLERANCE_MM of A4 or A3 is snapped to
+' the exact ISO size. Other sizes keep their measured width and height.
 '
 ' The macro uses MicroStation's built-in Bentley PDF driver (pdf.pltcfg) and
 ' the documented PRINT ... key-ins, so no external PDF printer is required.
@@ -36,16 +39,24 @@ Private Const OUTPUT_SUBFOLDER As String = "PDF"
 
 ' Level names (or parts of names) used for the sheet border. Case-insensitive.
 ' Separate names with a comma. Leave "" to skip this detection step.
-Private Const BORDER_LEVEL_HINTS As String = "PLOT,BORDER,SHEET,RAMKA,ARKUSZ,FORMAT,OBRAMOWANIE"
+' "RAMKA" matches both "M_RAMKA" and " _RAMKA".
+Private Const BORDER_LEVEL_HINTS As String = "RAMKA"
 
-' If True, a selection set overrides border/extents detection. A sheet model's
-' sheet definition always wins.
+' If True, a selection set is used as a fallback when no frame is found.
+' A sheet model's sheet definition and a frame level always win.
 Private Const USE_SELECTION_AS_PAGE As Boolean = True
 
 ' If a DGN contains sheet models, print only the sheet models. Design models
 ' in such a file are usually the source geometry, not printable sheets.
-' Set to False to print every model.
-Private Const PRINT_ONLY_SHEETS_IF_PRESENT As Boolean = True
+' Default is False because this macro is intended for design models that each
+' contain their own frame.
+Private Const PRINT_ONLY_SHEETS_IF_PRESENT As Boolean = False
+
+' Standard sizes that are snapped to the exact ISO paper size.
+' Only these names are snapped; every other size keeps its measured width and
+' height. Default: A4 and A3 with a 5 mm tolerance.
+Private Const STANDARD_SIZES_TO_SNAP As String = "A4,A3"
+Private Const STANDARD_SIZE_TOLERANCE_MM As Double = 5#
 
 ' Sanity limits for a detected page (millimetres).
 Private Const MIN_PAGE_MM As Double = 40#
@@ -72,9 +83,12 @@ End Type
 Private Type PageInfo
     Valid As Boolean
     Source As String
+    Paper As String
     IsSheet As Boolean
     WidthMM As Double
     HeightMM As Double
+    MeasuredWidthMM As Double
+    MeasuredHeightMM As Double
     Box As BBox
 End Type
 
@@ -182,7 +196,13 @@ Public Sub PrintCorrectSize()
         If infos(i).Valid Then
             summary = summary & Format$(i + 1, "00") & ". " & names(i) & _
                       "  ->  " & Format$(infos(i).WidthMM, "0.0") & " x " & _
-                      Format$(infos(i).HeightMM, "0.0") & " mm  [" & infos(i).Source & "]" & vbCrLf
+                      Format$(infos(i).HeightMM, "0.0") & " mm  [" & infos(i).Source & "]"
+            If infos(i).Paper <> "CUSTOM" Then
+                summary = summary & "  ->  " & infos(i).Paper & _
+                          " (measured " & Format$(infos(i).MeasuredWidthMM, "0.0") & " x " & _
+                          Format$(infos(i).MeasuredHeightMM, "0.0") & " mm)"
+            End If
+            summary = summary & vbCrLf
         Else
             summary = summary & Format$(i + 1, "00") & ". " & names(i) & _
                       "  ->  SKIPPED (no usable geometry)" & vbCrLf
@@ -212,7 +232,10 @@ Public Sub PrintCorrectSize()
                 okCount = okCount + 1
                 LogLine "OK   " & names(i) & " | " & _
                         Format$(infos(i).WidthMM, "0.0") & "x" & Format$(infos(i).HeightMM, "0.0") & _
-                        " mm | " & infos(i).Source & " | " & paths(i)
+                        " mm | " & infos(i).Paper & " | measured " & _
+                        Format$(infos(i).MeasuredWidthMM, "0.0") & "x" & _
+                        Format$(infos(i).MeasuredHeightMM, "0.0") & " mm | " & _
+                        infos(i).Source & " | " & paths(i)
             Else
                 failCount = failCount + 1
                 LogLine "FAIL " & names(i) & " | " & paths(i)
@@ -286,7 +309,13 @@ Public Sub PreviewCorrectSize()
         report = report & Format$(i, "00") & ". " & m.Name & vbCrLf
         If pi.Valid Then
             report = report & "     " & Format$(pi.WidthMM, "0.0") & " x " & _
-                     Format$(pi.HeightMM, "0.0") & " mm  [" & pi.Source & "]" & vbCrLf
+                     Format$(pi.HeightMM, "0.0") & " mm  [" & pi.Source & "]"
+            If pi.Paper <> "CUSTOM" Then
+                report = report & "  ->  " & pi.Paper & _
+                         " (measured " & Format$(pi.MeasuredWidthMM, "0.0") & " x " & _
+                         Format$(pi.MeasuredHeightMM, "0.0") & " mm)"
+            End If
+            report = report & vbCrLf
         Else
             report = report & "     SKIPPED - no usable geometry" & vbCrLf
         End If
@@ -345,6 +374,7 @@ Private Function GetPageInfo(ByVal m As ModelReference) As PageInfo
 
     pi.Valid = False
     pi.Source = ""
+    pi.Paper = ""
     pi.IsSheet = (m.Type = msdModelTypeSheet)
     pi.Box.Valid = False
 
@@ -355,10 +385,7 @@ Private Function GetPageInfo(ByVal m As ModelReference) As PageInfo
         If Err.Number = 0 Then
             If Not sd Is Nothing Then
                 If sd.Width > 0# And sd.Height > 0# Then
-                    pi.WidthMM = UORsToMM(m, sd.Width)
-                    pi.HeightMM = UORsToMM(m, sd.Height)
-                    pi.Source = "SHEET"
-                    pi.Valid = IsSanePage(pi.WidthMM, pi.HeightMM)
+                    SetPageSize pi, UORsToMM(m, sd.Width), UORsToMM(m, sd.Height), "SHEET"
                 End If
             End If
         End If
@@ -373,39 +400,36 @@ Private Function GetPageInfo(ByVal m As ModelReference) As PageInfo
         pi.IsSheet = False
     End If
 
-    ' 2. Manual override: selected elements.
-    If USE_SELECTION_AS_PAGE Then
+    ' 2. Elements on a frame/plot level. This is the normal path for design
+    '    models with a frame on M_RAMKA or _RAMKA.
+    If Len(Trim$(BORDER_LEVEL_HINTS)) > 0 Then
         On Error Resume Next
-        If m.AnyElementsSelected Then
-            b = BBoxFromEnumerator(m.GetSelectedElements)
-            If b.Valid Then
-                pi.WidthMM = UORsToMM(m, b.MaxX - b.MinX)
-                pi.HeightMM = UORsToMM(m, b.MaxY - b.MinY)
-                If IsSanePage(pi.WidthMM, pi.HeightMM) Then
-                    pi.Box = b
-                    pi.Source = "SELECTION"
-                    pi.Valid = True
-                    GetPageInfo = pi
-                    Exit Function
-                End If
+        b = BBoxFromBorderLevels(m)
+        If Err.Number = 0 And b.Valid Then
+            SetPageSize pi, UORsToMM(m, b.MaxX - b.MinX), _
+                        UORsToMM(m, b.MaxY - b.MinY), "BORDER LEVEL"
+            If pi.Valid Then
+                pi.Box = b
+                GetPageInfo = pi
+                Exit Function
             End If
         End If
         On Error GoTo 0
     End If
 
-    ' 3. Elements on a border/plot level.
-    If Len(Trim$(BORDER_LEVEL_HINTS)) > 0 Then
+    ' 3. Manual override: selected elements.
+    If USE_SELECTION_AS_PAGE Then
         On Error Resume Next
-        b = BBoxFromBorderLevels(m)
-        If Err.Number = 0 And b.Valid Then
-            pi.WidthMM = UORsToMM(m, b.MaxX - b.MinX)
-            pi.HeightMM = UORsToMM(m, b.MaxY - b.MinY)
-            If IsSanePage(pi.WidthMM, pi.HeightMM) Then
-                pi.Box = b
-                pi.Source = "BORDER LEVEL"
-                pi.Valid = True
-                GetPageInfo = pi
-                Exit Function
+        If m.AnyElementsSelected Then
+            b = BBoxFromEnumerator(m.GetSelectedElements)
+            If b.Valid Then
+                SetPageSize pi, UORsToMM(m, b.MaxX - b.MinX), _
+                            UORsToMM(m, b.MaxY - b.MinY), "SELECTION"
+                If pi.Valid Then
+                    pi.Box = b
+                    GetPageInfo = pi
+                    Exit Function
+                End If
             End If
         End If
         On Error GoTo 0
@@ -415,12 +439,10 @@ Private Function GetPageInfo(ByVal m As ModelReference) As PageInfo
     On Error Resume Next
     b = BBoxFromLargestClosedElement(m)
     If Err.Number = 0 And b.Valid Then
-        pi.WidthMM = UORsToMM(m, b.MaxX - b.MinX)
-        pi.HeightMM = UORsToMM(m, b.MaxY - b.MinY)
-        If IsSanePage(pi.WidthMM, pi.HeightMM) Then
+        SetPageSize pi, UORsToMM(m, b.MaxX - b.MinX), _
+                    UORsToMM(m, b.MaxY - b.MinY), "CLOSED ELEMENT"
+        If pi.Valid Then
             pi.Box = b
-            pi.Source = "CLOSED ELEMENT"
-            pi.Valid = True
             GetPageInfo = pi
             Exit Function
         End If
@@ -431,12 +453,10 @@ Private Function GetPageInfo(ByVal m As ModelReference) As PageInfo
     On Error Resume Next
     b = BBoxFromAllElements(m)
     If Err.Number = 0 And b.Valid Then
-        pi.WidthMM = UORsToMM(m, b.MaxX - b.MinX)
-        pi.HeightMM = UORsToMM(m, b.MaxY - b.MinY)
-        If IsSanePage(pi.WidthMM, pi.HeightMM) Then
+        SetPageSize pi, UORsToMM(m, b.MaxX - b.MinX), _
+                    UORsToMM(m, b.MaxY - b.MinY), "EXTENTS"
+        If pi.Valid Then
             pi.Box = b
-            pi.Source = "EXTENTS"
-            pi.Valid = True
         End If
     End If
     On Error GoTo 0
@@ -461,12 +481,16 @@ Private Function BBoxFromEnumerator(ByVal ee As ElementEnumerator) As BBox
 End Function
 
 Private Function BBoxFromBorderLevels(ByVal m As ModelReference) As BBox
-    Dim b As BBox
+    Dim allOnLevels As BBox
+    Dim closedBest As BBox
+    Dim bestArea As Double
+    Dim area As Double
     Dim ee As ElementEnumerator
     Dim el As Element
     Dim r As Range3d
     Dim levelName As String
 
+    bestArea = 0#
     Set ee = m.Scan(Nothing)
     Do While ee.MoveNext
         Set el = ee.Current
@@ -478,12 +502,37 @@ Private Function BBoxFromBorderLevels(ByVal m As ModelReference) As BBox
 
             If MatchesAny(levelName, BORDER_LEVEL_HINTS) Then
                 r = el.Range(False)
-                BBoxAdd b, r
+
+                ' Text and dimensions on the frame level must not enlarge the
+                ' page. They are usually notes placed outside the frame.
+                If Not el.IsTextElement And Not el.IsTextNodeElement And _
+                   Not el.IsDimensionElement Then
+                    BBoxAdd allOnLevels, r
+                End If
+
+                ' Prefer the largest closed element (the frame shape) over the
+                ' union of everything on the level. This ignores notes or other
+                ' elements that happen to share the frame level.
+                If el.IsClosedElement Then
+                    area = (r.High.X - r.Low.X) * (r.High.Y - r.Low.Y)
+                    If area > bestArea Then
+                        bestArea = area
+                        BBoxInit closedBest
+                        BBoxAdd closedBest, r
+                    End If
+                End If
             End If
         End If
     Loop
 
-    BBoxFromBorderLevels = b
+    ' The frame level is dedicated to the frame, so the largest closed element
+    ' is the frame shape. If the frame is drawn from lines, there is no closed
+    ' element and the union of the level is used instead.
+    If closedBest.Valid Then
+        BBoxFromBorderLevels = closedBest
+    Else
+        BBoxFromBorderLevels = allOnLevels
+    End If
 End Function
 
 Private Function BBoxFromLargestClosedElement(ByVal m As ModelReference) As BBox
@@ -565,6 +614,113 @@ Private Function IsSanePage(ByVal wMM As Double, ByVal hMM As Double) As Boolean
     If wMM < MIN_PAGE_MM Or hMM < MIN_PAGE_MM Then Exit Function
     If wMM > MAX_PAGE_MM Or hMM > MAX_PAGE_MM Then Exit Function
     IsSanePage = True
+End Function
+
+Private Sub SetPageSize(ByRef pi As PageInfo, ByVal wMM As Double, ByVal hMM As Double, _
+                        ByVal source As String)
+    Dim stdW As Double
+    Dim stdH As Double
+    Dim paperName As String
+
+    pi.MeasuredWidthMM = wMM
+    pi.MeasuredHeightMM = hMM
+    pi.WidthMM = wMM
+    pi.HeightMM = hMM
+    pi.Source = source
+    pi.Paper = "CUSTOM"
+
+    If SnapToStandard(wMM, hMM, stdW, stdH, paperName) Then
+        pi.WidthMM = stdW
+        pi.HeightMM = stdH
+        pi.Paper = paperName
+    End If
+
+    pi.Valid = IsSanePage(pi.WidthMM, pi.HeightMM)
+End Sub
+
+' Returns True when the measured page is within the tolerance of one of the
+' sizes listed in STANDARD_SIZES_TO_SNAP. The returned width/height keep the
+' orientation of the measured page.
+Private Function SnapToStandard(ByVal wMM As Double, ByVal hMM As Double, _
+                                ByRef outW As Double, ByRef outH As Double, _
+                                ByRef paperName As String) As Boolean
+    Dim names() As String
+    Dim i As Long
+    Dim stdW As Double
+    Dim stdH As Double
+    Dim measuredShort As Double
+    Dim measuredLong As Double
+    Dim standardShort As Double
+    Dim standardLong As Double
+    Dim candidate As String
+
+    SnapToStandard = False
+    paperName = "CUSTOM"
+
+    If Len(Trim$(STANDARD_SIZES_TO_SNAP)) = 0 Then Exit Function
+
+    measuredShort = wMM
+    measuredLong = hMM
+    If measuredShort > measuredLong Then
+        measuredShort = hMM
+        measuredLong = wMM
+    End If
+
+    names = Split(STANDARD_SIZES_TO_SNAP, ",")
+    For i = LBound(names) To UBound(names)
+        candidate = Trim$(CStr(names(i)))
+        If Len(candidate) > 0 Then
+            If PaperDimensions(candidate, stdW, stdH) Then
+                standardShort = stdW
+                standardLong = stdH
+                If standardShort > standardLong Then
+                    standardShort = stdH
+                    standardLong = stdW
+                End If
+
+                If Abs(measuredShort - standardShort) <= STANDARD_SIZE_TOLERANCE_MM And _
+                   Abs(measuredLong - standardLong) <= STANDARD_SIZE_TOLERANCE_MM Then
+
+                    If wMM > hMM Then
+                        outW = standardLong
+                        outH = standardShort
+                    Else
+                        outW = standardShort
+                        outH = standardLong
+                    End If
+
+                    paperName = UCase$(candidate)
+                    SnapToStandard = True
+                    Exit Function
+                End If
+            End If
+        End If
+    Next i
+End Function
+
+' ISO A and B sizes in millimetres, portrait orientation.
+Private Function PaperDimensions(ByVal paperName As String, _
+                                 ByRef wMM As Double, ByRef hMM As Double) As Boolean
+    PaperDimensions = True
+
+    Select Case UCase$(Trim$(paperName))
+        Case "A0": wMM = 841#: hMM = 1189#
+        Case "A1": wMM = 594#: hMM = 841#
+        Case "A2": wMM = 420#: hMM = 594#
+        Case "A3": wMM = 297#: hMM = 420#
+        Case "A4": wMM = 210#: hMM = 297#
+        Case "A5": wMM = 148#: hMM = 210#
+        Case "A6": wMM = 105#: hMM = 148#
+        Case "B0": wMM = 1000#: hMM = 1414#
+        Case "B1": wMM = 707#: hMM = 1000#
+        Case "B2": wMM = 500#: hMM = 707#
+        Case "B3": wMM = 353#: hMM = 500#
+        Case "B4": wMM = 250#: hMM = 353#
+        Case "B5": wMM = 176#: hMM = 250#
+        Case "B6": wMM = 125#: hMM = 176#
+        Case Else
+            PaperDimensions = False
+    End Select
 End Function
 
 Private Function UORsToMM(ByVal m As ModelReference, ByVal uors As Double) As Double

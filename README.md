@@ -1,12 +1,16 @@
 # PrintCorrectSize for MicroStation V8i
 
-A small VBA macro for MicroStation V8i that prints each model/sheet of a DGN
-to a **separate PDF with the correct page size**.
+A small VBA macro for MicroStation V8i that prints each model of a DGN to a
+**separate PDF with the correct page size**.
 
 It solves the usual batch-print problem: when a project contains A4, A3 and
 custom-size sheets, choosing one paper size makes small sheets tiny and clips
-large sheets. This macro detects the size of every model and sets the PDF page
-size individually.
+large sheets. This macro measures the frame in every model and sets the PDF
+page size individually.
+
+The primary workflow is: one DGN, several **design models**, each model has a
+frame on a level whose name contains `RAMKA` (for example `M_RAMKA` or
+` _RAMKA`).
 
 > Status: source code is ready for testing on real drawings. Test it on a copy
 > of a DGN first. The repository intentionally contains source, not a compiled
@@ -15,14 +19,18 @@ size individually.
 ## What it does
 
 - Prints all printable models of the active DGN, one PDF per model.
+- Measures the frame on the `RAMKA` level in every model.
 - Detects page size from:
-  1. a sheet model's sheet definition,
+  1. a sheet model's sheet definition (if present),
   2. a selection set (manual override),
-  3. a border/plot level,
+  3. elements on a border/plot level (`RAMKA`),
   4. the largest closed element,
   5. the extents of all graphical elements.
-- Sets the PDF page to the exact detected width × height (including custom
-  sizes such as 350 × 500 mm).
+- Snaps to the exact A4 or A3 page when the measured frame is within 5 mm of
+  that size. Every other size keeps its measured width × height, including
+  other A/B sizes.
+- Sets the PDF page to the detected width × height (including custom sizes
+  such as 350 × 500 mm).
 - Uses MicroStation's built-in Bentley PDF driver (`pdf.pltcfg`), so no
   external PDF printer is required.
 - Writes a `PrintCorrectSize.log` with the detected sizes and results.
@@ -31,6 +39,8 @@ size individually.
 ## Requirements
 
 - MicroStation V8i (SELECTseries) with VBA.
+- Design models with a frame on a level whose name contains `RAMKA`
+  (`M_RAMKA`, ` _RAMKA`). Other frame-level names can be configured.
 - The standard Bentley PDF driver `pdf.pltcfg` installed and available through
   `MS_PLTCFG_PATH`.
 - The driver must allow paper size editing. Bentley PDF drivers normally do.
@@ -87,19 +97,25 @@ The first matching rule wins:
 | Order | Source | When it is used |
 |---|---|---|
 | 1 | `SHEET` | The model is a sheet model and has a valid sheet definition. |
-| 2 | `SELECTION` | Something is selected in the model. Select the border or the elements that define the page. |
-| 3 | `BORDER LEVEL` | Elements exist on a level whose name contains one of the hints from `BORDER_LEVEL_HINTS`. |
+| 2 | `BORDER LEVEL` | Elements exist on a level whose name contains one of the hints from `BORDER_LEVEL_HINTS`. The default `RAMKA` matches `M_RAMKA` and ` _RAMKA`. |
+| 3 | `SELECTION` | No frame was found, but something is selected in the model. Select the border or the elements that define the page. |
 | 4 | `CLOSED ELEMENT` | The largest closed element (usually a rectangle) is used. |
 | 5 | `EXTENTS` | Fallback: the extents of all graphical elements. |
 
-For a sheet model, MicroStation's own sheet size is authoritative. The
-selection set is useful for design models that do not have a border on a
-recognised level: select the page border before running the macro.
+For a design model with a frame on `M_RAMKA` or ` _RAMKA`, the frame is
+measured and that is the page. If the frame is a closed shape, the macro uses
+the largest closed element on the frame level; if the frame is drawn from
+lines, it uses the union of the non-text elements on that level. Text and
+dimensions on the frame level are ignored so notes outside the frame do not
+enlarge the page.
 
-By default, if a DGN contains sheet models, only sheet models are printed.
-Design models in such a file are usually source geometry, not printable
-sheets. Change `PRINT_ONLY_SHEETS_IF_PRESENT` in the source if you need every
-model.
+For a sheet model, MicroStation's own sheet size is authoritative. The
+selection set is only a fallback for unusual models without a frame: select
+the page border before running the macro.
+
+By default `PRINT_ONLY_SHEETS_IF_PRESENT` is `False`, so every model is printed
+when there are no sheet models. If a DGN does contain sheet models and you
+want only those, set it to `True`.
 
 ## Configuration
 
@@ -109,9 +125,11 @@ All settings are constants at the top of `PrintCorrectSize.bas`:
 |---|---|---|
 | `PDF_DRIVER` | `pdf.pltcfg` | Bentley PDF plot driver. |
 | `OUTPUT_SUBFOLDER` | `PDF` | Sub-folder for PDFs; `""` writes next to the DGN. |
-| `BORDER_LEVEL_HINTS` | `PLOT,BORDER,SHEET,RAMKA,ARKUSZ,FORMAT,OBRAMOWANIE` | Comma-separated, case-insensitive level-name fragments. |
+| `BORDER_LEVEL_HINTS` | `RAMKA` | Comma-separated, case-insensitive level-name fragments. Matches `M_RAMKA` and ` _RAMKA`. |
 | `USE_SELECTION_AS_PAGE` | `True` | Use a selection set as the page size override. |
-| `PRINT_ONLY_SHEETS_IF_PRESENT` | `True` | If sheet models exist, print only them. |
+| `PRINT_ONLY_SHEETS_IF_PRESENT` | `False` | If sheet models exist, print only them. |
+| `STANDARD_SIZES_TO_SNAP` | `A4,A3` | Sizes that are snapped to exact ISO dimensions. |
+| `STANDARD_SIZE_TOLERANCE_MM` | `5` | Maximum difference from a standard size, per side, for snapping. |
 | `MIN_PAGE_MM` | `40` | Reject detected pages smaller than this. |
 | `MAX_PAGE_MM` | `10000` | Reject detected pages larger than this. |
 | `PDF_TIMEOUT_SEC` | `180` | Wait time for one PDF. |
@@ -125,9 +143,11 @@ All settings are constants at the top of `PrintCorrectSize.bas`:
   temporary fence.
 - It prints the active DGN. If every object is a separate DGN file, run the
   macro once per file (a safe folder-batch mode may be added later).
-- The PDF page size is exact. The PDF driver may still apply its own small
-  internal margins, so the drawing can be a fraction of a millimetre smaller
-  than the page.
+- A4 and A3 are snapped to their exact ISO dimensions when the measured frame
+  is within 5 mm. Other sizes, including A0–A2 and B-series, keep the measured
+  width × height. The preview shows both the final page and the measured size.
+- The PDF driver may still apply its own small internal margins, so the
+  drawing can be a fraction of a millimetre smaller than the page.
 - Custom sizes depend on the driver's paper size editing support. If the
   driver ignores `PRINT XFORM` / `PRINT YFORM`, use a Bentley PDF driver that
   allows editing the paper size.

@@ -74,8 +74,11 @@ Run `Preview` first. The source is shown in brackets:
 - `[SELECTION]` — something was selected when the macro ran. Clear the
   selection or select the correct border.
 - `[BORDER LEVEL]` — the macro found elements on a level whose name matches
-  `BORDER_LEVEL_HINTS`. Check that the level contains only the page border,
-  not notes or geometry outside the page.
+  `BORDER_LEVEL_HINTS` (default: `RAMKA`, so `M_RAMKA` and ` _RAMKA` match).
+  If the level has a closed frame shape, the largest closed element is used;
+  otherwise the union of non-text elements on that level is used. Text and
+  dimensions are ignored, but other geometry on the frame level can still
+  enlarge the page.
 - `[CLOSED ELEMENT]` — the largest closed element was used. If the largest
   closed element is not the page border, put the border on a recognised level
   or select it manually.
@@ -101,18 +104,30 @@ If the preview already shows the same size for every model, the detection is
 wrong, not the printing. Check the source in brackets and use a selection or
 the border level.
 
+### A4/A3 snapping
+
+A measured frame is snapped to exact A4 or A3 only when **both** sides are
+within 5 mm of the standard. For example:
+
+- 212 × 299 mm → A4 (210 × 297 mm)
+- 300 × 423 mm → A3 (297 × 420 mm)
+- 216 × 300 mm → custom 216 × 300 mm (more than 5 mm from A4)
+- 420 × 594 mm → custom 420 × 594 mm (A2 is not in the default snap list)
+
+The preview shows both the final page and the measured size. To snap other
+sizes, add them to `STANDARD_SIZES_TO_SNAP` (for example `A4,A3,A2,B1`).
+Every name must exist in `PaperDimensions` in the source.
+
 ## Extra PDFs are created
 
-The macro prints every selected model. By default:
+The macro prints every selected model. By default all models are printed
+(`PRINT_ONLY_SHEETS_IF_PRESENT = False`). If a DGN contains sheet models and
+you want only those, set `PRINT_ONLY_SHEETS_IF_PRESENT = True`.
 
-- if the DGN has sheet models, only sheet models are printed;
-- otherwise all models are printed.
-
-If you get PDFs for source/design models, the DGN probably has no sheet
-models. Options:
+If you get PDFs for models you do not want to print, options:
 
 - rename or remove the models you do not want to print,
-- change `PRINT_ONLY_SHEETS_IF_PRESENT` in the source,
+- add a model filter in the source,
 - or keep separate DGN files for source geometry and sheets.
 
 A per-model include/exclude list is not part of the current version.
