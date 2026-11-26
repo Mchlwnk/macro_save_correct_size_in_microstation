@@ -126,7 +126,7 @@ Wszystkie ustawienia to stałe na początku `PrintCorrectSize.bas`:
 | `PDF_DRIVER` | `pdf.pltcfg` | Sterownik Bentley PDF. |
 | `OUTPUT_SUBFOLDER` | `PDF` | Podfolder na PDF-y; `""` zapisuje obok DGN. |
 | `BORDER_LEVEL_HINTS` | `RAMKA` | Fragmenty nazw leveli, oddzielone przecinkami, bez rozróżniania wielkości liter. Pasuje do `M_RAMKA` i ` _RAMKA`. |
-| `USE_SELECTION_AS_PAGE` | `True` | Użyj zaznaczenia jako rozmiaru strony. |
+| `USE_SELECTION_AS_PAGE` | `True` | Użyj zaznaczenia, gdy nie znaleziono ramki. |
 | `PRINT_ONLY_SHEETS_IF_PRESENT` | `False` | Jeśli są sheet modele, drukuj tylko je. |
 | `STANDARD_SIZES_TO_SNAP` | `A4,A3` | Rozmiary zaokrąglane do dokładnych wymiarów ISO. |
 | `STANDARD_SIZE_TOLERANCE_MM` | `5` | Maksymalna różnica od rozmiaru standardowego, na każdym boku. |
@@ -170,8 +170,8 @@ Szybka lista:
 - Zły rozmiar strony: uruchom `Preview`, sprawdź źródło w nawiasach i w razie
   potrzeby zaznacz obrys strony przed uruchomieniem makra.
 - Dodatkowe PDF-y: w DGN są modele, których nie chcesz drukować. Domyślnie
-  preferowane są sheet modele; w innym wypadku usuń lub zmień nazwy
-  niechcianych modeli.
+  drukowane są wszystkie modele; usuń lub zmień nazwy niechcianych modeli
+  albo ustaw `PRINT_ONLY_SHEETS_IF_PRESENT`, jeśli w pliku są sheet modele.
 - Nie ma makra: projekt nie jest załadowany albo nazwa projektu nie jest
   `PrintCorrectSize`.
 

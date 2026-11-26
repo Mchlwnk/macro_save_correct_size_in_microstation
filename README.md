@@ -127,7 +127,7 @@ All settings are constants at the top of `PrintCorrectSize.bas`:
 | `PDF_DRIVER` | `pdf.pltcfg` | Bentley PDF plot driver. |
 | `OUTPUT_SUBFOLDER` | `PDF` | Sub-folder for PDFs; `""` writes next to the DGN. |
 | `BORDER_LEVEL_HINTS` | `RAMKA` | Comma-separated, case-insensitive level-name fragments. Matches `M_RAMKA` and ` _RAMKA`. |
-| `USE_SELECTION_AS_PAGE` | `True` | Use a selection set as the page size override. |
+| `USE_SELECTION_AS_PAGE` | `True` | Use a selection set as a fallback when no frame is found. |
 | `PRINT_ONLY_SHEETS_IF_PRESENT` | `False` | If sheet models exist, print only them. |
 | `STANDARD_SIZES_TO_SNAP` | `A4,A3` | Sizes that are snapped to exact ISO dimensions. |
 | `STANDARD_SIZE_TOLERANCE_MM` | `5` | Maximum difference from a standard size, per side, for snapping. |
@@ -163,8 +163,9 @@ Quick checks:
   and that `MS_PLTCFG_PATH` points to its folder.
 - Page size is wrong: run `Preview`, check the source in brackets, and select
   the page border before running the macro if needed.
-- Extra PDFs: the DGN contains models you do not want to print. By default,
-  sheet models are preferred; otherwise remove or rename unwanted models.
+- Extra PDFs: the DGN contains models you do not want to print. By default all
+  models are printed; remove or rename unwanted models, or set
+  `PRINT_ONLY_SHEETS_IF_PRESENT` if the file contains sheet models.
 - Macro not found: the project is not loaded, or the project name is not
   `PrintCorrectSize`.
 
