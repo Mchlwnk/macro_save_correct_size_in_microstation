@@ -1,149 +1,212 @@
-# Installation
+# Instalacja makra PrintCorrectSize
 
-This page describes how to install the macro in MicroStation V8i. The same
-steps work for V8i SELECTseries 1–4.
+Ta instrukcja dotyczy MicroStation V8i (SELECTseries). Makro jest plikiem
+źródłowym VBA `.bas`, który trzeba zaimportować do projektu VBA w MicroStation.
+Projekt jest zapisywany jako plik `.mvba`.
 
-## 1. Get the source file
+Do drukowania potrzebny jest sterownik Bentley PDF `pdf.pltcfg` z włączoną
+możliwością edycji rozmiaru papieru. Makro sprawdza obecność sterownika przed
+rozpoczęciem.
 
-Download `src/PrintCorrectSize.bas` from the repository. Keep the file
-somewhere easy to find, for example your Desktop.
+## 1. Przygotuj plik źródłowy
 
-The `.bas` file is a plain VBA module. It must be imported into a VBA project
-inside MicroStation. MicroStation stores VBA projects in `.mvba` files.
-
-## 2. Find a folder for macros
-
-MicroStation looks for VBA projects in the folders listed by the configuration
-variable `MS_VBASEARCHDIRECTORIES`. A common location is:
+Pobierz z repozytorium:
 
 ```text
-...\Workspace\Standards\Macros\vba
+src/PrintCorrectSize.bas
 ```
 
-or, in a default V8i installation:
+Zapisz go w łatwym do znalezienia miejscu, np. na pulpicie. Nie zmieniaj
+kodowania pliku. Ustawienia stałych zmieniaj w edytorze VBA, nie w Notatniku —
+plik jest przygotowany jako źródło VBA.
+
+## 2. Wybierz folder na projekt VBA
+
+MicroStation szuka projektów VBA w folderach zdefiniowanych przez zmienną
+konfiguracyjną `MS_VBASEARCHDIRECTORIES`. Typowe miejsce:
 
 ```text
-C:\ProgramData\Bentley\MicroStation V8i (SELECTseries)\WorkSpace\Standards\Macros\vba
+...\Workspace\Standards\vba
 ```
 
-If the folder does not exist, you can create it. You can also use any folder
-and add it to `MS_VBASEARCHDIRECTORIES`:
+W domyślnej instalacji V8i może to być np.:
 
-1. In MicroStation, open **Workspace > Configuration**.
-2. Find `MS_VBASEARCHDIRECTORIES`.
-3. Add your folder to the list.
+```text
+C:\ProgramData\Bentley\MicroStation V8i (SELECTseries)\WorkSpace\Standards\vba
+```
 
-For a first test it is enough to save the project anywhere and load it
-manually with the Project Manager.
+Dokładna ścieżka zależy od instalacji i konfiguracji workspace. Nie zgaduj
+jej — sprawdź wartość `MS_VBASEARCHDIRECTORIES` w konfiguracji.
 
-## 3. Create the VBA project
+Jeśli folder nie istnieje, możesz go utworzyć. Możesz też zapisać projekt w
+innym miejscu i ładować go ręcznie (patrz punkt 6).
 
-1. In MicroStation, open **Utilities > Macro > Project Manager**.
-   In some V8i versions the menu is **Tools > VBA > Project Manager**.
-2. Click **New Project** (the new-project icon).
-3. Name the project:
+Nowe projekty są domyślnie tworzone w folderze `MS_VBANEWPROJECTDIRECTORY`.
+Możesz sprawdzić obie zmienne w:
+
+**Workspace > Configuration > Configuration Variables**
+
+lub w oknie konfiguracji workspace, zależnie od wersji V8i.
+
+## 3. Utwórz projekt VBA
+
+### Wariant A — przez Project Manager
+
+1. W MicroStation otwórz **Utilities > Macro > Project Manager**.
+   W niektórych wersjach V8i menu może być **Tools > VBA > Project Manager**.
+2. Kliknij ikonę **New Project**.
+3. W oknie zapisu ustaw nazwę pliku:
 
    ```text
-   PrintCorrectSize
+   PrintCorrectSize.mvba
    ```
 
-4. Save it as `PrintCorrectSize.mvba` in the macro folder from step 2.
-5. The project appears in the Project Manager list.
+   i wskaż folder z punktu 2.
+4. Projekt pojawi się na liście w Project Managerze jako `PrintCorrectSize`.
+   Jeśli okno pozwala też wpisać nazwę projektu, wpisz `PrintCorrectSize`.
 
-Alternative: open **Utilities > Key-in** and enter
+### Wariant B — przez key-in
+
+Otwórz **Utilities > Key-in** i wpisz:
 
 ```text
 vba create PrintCorrectSize.mvba
 ```
 
-This creates and loads the empty project. Then continue with the import step
-below.
+Jeśli nie podasz ścieżki, projekt zostanie utworzony w folderze
+`MS_VBANEWPROJECTDIRECTORY` (a jeśli ta zmienna nie jest ustawiona — w katalogu
+programu MicroStation). Projekt zostanie od razu utworzony i załadowany.
 
-The project name matters: the example key-in uses
-`[PrintCorrectSize]`. If you choose another name, use that name in the key-in.
+## 4. Zaimportuj moduł
 
-## 4. Import the module
+1. Zaznacz projekt `PrintCorrectSize` w Project Managerze.
+2. Kliknij **Edit** / **Show VBA Editor**, żeby otworzyć edytor Visual Basic.
+   Możesz też użyć key-inu:
 
-1. Select the new project in the Project Manager.
-2. Click **Edit** (or **Show VBA Editor**) to open the Microsoft Visual Basic
-   editor.
-3. In the VBA editor, choose **File > Import File...**.
-4. Select `PrintCorrectSize.bas`.
-5. The module `PrintCorrectSize` appears in the Project Explorer. If a module
-   with that name already exists, remove the old one first, then import again.
-6. Choose **File > Save** (or Ctrl+S) to save the `.mvba` project.
-7. Close the VBA editor.
+   ```text
+   vba edit PrintCorrectSize
+   ```
 
-If MicroStation asks whether to save the project when closing the editor,
-choose **Yes**.
+3. W edytorze VBA wybierz **File > Import File...**.
+4. Wskaż plik `PrintCorrectSize.bas`.
+5. Moduł `PrintCorrectSize` pojawi się w oknie Project Explorer.
+6. Jeśli moduł o tej nazwie już istnieje, najpierw usuń stary moduł, a potem
+   zaimportuj nowy plik.
+7. Zapisz projekt: **File > Save** (Ctrl+S).
+8. Zamknij edytor VBA. Jeśli MicroStation zapyta o zapis projektu, wybierz
+   **Yes**.
 
-## 5. Load the project
+Nazwa modułu jest ustawiona w pliku przez `Attribute VB_Name =
+"PrintCorrectSize"`. Dzięki temu key-in ma postać:
 
-If the project is not loaded:
+```text
+[PrintCorrectSize]PrintCorrectSize.Main
+```
 
-1. Open **Utilities > Macro > Project Manager**.
-2. Select `PrintCorrectSize` in the list.
-3. Click **Load Project**.
+Pierwszy człon to nazwa **projektu**, drugi to nazwa **modułu**.
 
-The macros from the project are now available in **Utilities > Macros**.
+## 5. Załaduj projekt
 
-## 6. Run the macro
+Jeśli projekt nie jest załadowany:
 
-You can run the macro in two ways.
+1. Otwórz **Utilities > Macro > Project Manager**.
+2. Zaznacz `PrintCorrectSize`.
+3. Kliknij **Load Project**.
 
-### From the key-in window
+Możesz też użyć key-inu:
 
-Open **Utilities > Key-in** and enter:
+```text
+vba load PrintCorrectSize
+```
+
+Jeśli projekt jest poza `MS_VBASEARCHDIRECTORIES`, podaj pełną ścieżkę:
+
+```text
+vba load "C:\...\PrintCorrectSize.mvba"
+```
+
+Cudzysłowy są potrzebne, gdy ścieżka zawiera spacje.
+
+## 6. Uruchom makro
+
+### Podgląd — najpierw to uruchom
+
+Otwórz **Utilities > Key-in** i wpisz:
 
 ```text
 vba run [PrintCorrectSize]PrintCorrectSize.Preview
 ```
 
-This only lists the models and detected page sizes. When the list looks
-correct, run:
+Makro pokaże listę modeli, wykryte rozmiary stron i źródło rozmiaru:
+
+- `ARKUSZ` — rozmiar z definicji modelu arkusza,
+- `LEVEL RAMKI` — ramka na levelu `RAMKA`,
+- `ZAZNACZENIE` — użyto zaznaczenia,
+- `ZAMKNIETY ELEMENT` — największy zamknięty element,
+- `GRANICE` — extents wszystkich elementów.
+
+Jeśli coś jest nie tak, popraw level ramki albo zaznacz właściwe elementy
+przed uruchomieniem.
+
+### Właściwy druk
+
+Gdy podgląd wygląda dobrze:
 
 ```text
 vba run [PrintCorrectSize]PrintCorrectSize.Main
 ```
 
-### From the Macros dialog
+Możesz też uruchomić oba makra z okna **Utilities > Macros**.
 
-1. Open **Utilities > Macros**.
-2. Select `PrintCorrectSize.Preview` or `PrintCorrectSize.Main`.
-3. Click **Play**.
+## 7. Pierwszy test na kopii DGN
 
-## 7. First test
+1. Otwórz **kopię** prawdziwego pliku DGN, nie oryginał.
+2. Zapisz plik.
+3. Uruchom `Preview`.
+4. Sprawdź:
+   - czy lista modeli się zgadza,
+   - czy każdy model ma właściwy rozmiar,
+   - czy źródło w nawiasach ma sens.
+5. Uruchom `Main`.
+6. Otwórz PDF-y z podfolderu `PDF` i sprawdź:
+   - rozmiar strony w **File > Properties**,
+   - czy nic nie jest obcięte,
+   - czy rysunek wypełnia stronę,
+   - czy linie, tekst i referencje wyglądają poprawnie.
+7. Sprawdź log `PrintCorrectSize_<dgn>.log` w folderze `PDF`.
 
-Use a copy of a real DGN, not the original:
+Pełna lista kontrolna: [`TEST_CHECKLIST.md`](TEST_CHECKLIST.md).
 
-1. Open the copy.
-2. Run `Preview`.
-3. Check the model list and the page sizes.
-4. Run `Main`.
-5. Open the generated PDFs from the `PDF` sub-folder and check:
-   - the page size,
-   - that nothing is clipped,
-   - that the drawing fills the page as expected.
+## 8. Typowe problemy z instalacją
 
-The log file `PrintCorrectSize.log` is written next to the PDFs.
+- **Nie ma makra na liście** — projekt nie jest załadowany albo moduł nie
+  został zaimportowany.
+- **`vba run [PrintCorrectSize]...` nie znajduje projektu** — projekt jest
+  poza `MS_VBASEARCHDIRECTORIES`. Załaduj go ręcznie przez Project Manager
+  albo przez `vba load "pełna ścieżka\PrintCorrectSize.mvba"`.
+- **Nazwa projektu jest inna** — użyj własnej nazwy w key-inie, np.
+  `vba run [MojaNazwa]PrintCorrectSize.Main`.
+- **Import się nie udaje** — usuń stary moduł `PrintCorrectSize` z projektu i
+  zaimportuj plik ponownie.
+- **Brak sterownika PDF** — makro sprawdza `pdf.pltcfg` przez
+  `MS_PLTCFG_PATH`. Szczegóły: [`TROUBLESHOOTING.md`](TROUBLESHOOTING.md).
 
-## Updating the macro
+## 9. Aktualizacja makra
 
-When a new version of `PrintCorrectSize.bas` is published:
+Gdy pojawi się nowsza wersja `PrintCorrectSize.bas`:
 
-1. Open the VBA editor.
-2. Remove the old `PrintCorrectSize` module, or import the new file and let
-   MicroStation replace it.
-3. Import the new `.bas`.
-4. Save the `.mvba` project.
+1. Otwórz edytor VBA dla projektu `PrintCorrectSize`.
+2. Usuń stary moduł `PrintCorrectSize`.
+3. Zaimportuj nowy plik `.bas`.
+4. Zapisz projekt `.mvba`.
 
-The repository keeps only the current version.
+Repozytorium zawiera tylko aktualną wersję makra.
 
-## Uninstalling
+## 10. Odinstalowanie
 
-1. Open the Project Manager.
-2. Unload the `PrintCorrectSize` project.
-3. Delete `PrintCorrectSize.mvba` from the macro folder.
+1. W Project Managerze odładuj projekt `PrintCorrectSize`.
+2. Usuń plik `PrintCorrectSize.mvba` z folderu makr.
 
-The macro does not write anything outside the DGN folder and its `PDF`
-sub-folder, apart from the optional log file.
+Makro nie zapisuje niczego poza folderem `PDF` obok pliku DGN; w tym folderze
+może powstać log. Nie modyfikuje istniejących elementów rysunku; tworzy tylko tymczasowy
+fence i zmienia ustawienia druku.

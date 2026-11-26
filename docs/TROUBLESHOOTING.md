@@ -1,216 +1,212 @@
-# Troubleshooting
+# Rozwiązywanie problemów
 
-## The macro is not in the Macros dialog
+## Nie ma makra na liście
 
-- Make sure the `PrintCorrectSize` project is loaded in
+- Sprawdź, czy projekt `PrintCorrectSize` jest załadowany w
   **Utilities > Macro > Project Manager**.
-- Make sure the module was imported into that project.
-- If you renamed the project, use the new name in the key-in:
-  `vba run [YourProjectName]PrintCorrectSize.Main`.
-- Check that macros are enabled in MicroStation.
+- Sprawdź, czy moduł `PrintCorrectSize` został zaimportowany do tego projektu.
+- Jeśli zmieniłeś nazwę projektu, użyj jej w key-inie:
+  `vba run [TwojaNazwa]PrintCorrectSize.Main`.
+- Sprawdź, czy makra VBA nie są zablokowane w MicroStation.
 
-## `vba run ...` says the macro was not found
+## `vba run ...` mówi, że nie znaleziono makra
 
-The syntax is:
+Składnia jest taka:
 
 ```text
-vba run [ProjectName]ModuleName.ProcedureName
+vba run [NazwaProjektu]NazwaModulu.NazwaProcedury
 ```
 
-For this project:
+Dla tego projektu:
 
 ```text
 vba run [PrintCorrectSize]PrintCorrectSize.Main
 ```
 
-The first `PrintCorrectSize` is the **project** name, the second is the
-**module** name. Both are case-insensitive in practice, but spelling must
-match.
-
-## No PDF is created, or the log says `FAIL`
-
-1. Check that the Bentley PDF driver is installed:
-   `pdf.pltcfg`.
-2. Check the configuration variable `MS_PLTCFG_PATH`. It must point to the
-   folder that contains `pdf.pltcfg`. The macro checks this before printing
-   and refuses to start if the driver is not found.
-3. Open the Print dialog manually, select the Bentley PDF driver, and try to
-   print one model. If that also fails, the problem is in the driver setup,
-   not in the macro.
-4. Check that the output folder is writable. The macro writes to a `PDF`
-   sub-folder next to the DGN.
-5. Check `PrintCorrectSize_<dgn>.log` in the output folder for the failing model.
-6. Close the PDF in Acrobat/Reader before re-running. A locked PDF cannot be
-   replaced; the log will say `cannot delete stale PDF`.
-
-The timeout is 180 seconds per PDF. A very large or raster-heavy model may
-need more time. Increase `PDF_TIMEOUT_SEC` in the source if needed.
-
-## The PDF page has a standard size instead of the custom size
-
-The macro sets the page with the documented key-ins:
+Pierwszy `PrintCorrectSize` to **projekt**, drugi to **moduł**. Jeśli projekt
+jest poza `MS_VBASEARCHDIRECTORIES`, najpierw go załaduj:
 
 ```text
-PRINT XFORM <width> MM
-PRINT YFORM <height> MM
+vba load "C:\...\PrintCorrectSize.mvba"
+vba run [PrintCorrectSize]PrintCorrectSize.Main
 ```
 
-This requires a Bentley driver that allows editing the paper size. In the
-Print dialog:
+## Nie powstaje PDF albo w logu jest `BLAD`
 
-1. Open **File > Edit Printer Driver Configuration**.
-2. Check the base properties for an option such as **Allow paper size
-   editing** and enable it.
-3. Save the driver configuration.
-4. Run the macro again.
+1. Sprawdź, czy sterownik Bentley PDF jest zainstalowany: `pdf.pltcfg`.
+2. Sprawdź zmienną `MS_PLTCFG_PATH`. Powinna wskazywać folder ze sterownikiem.
+   Domyślnie makro sprawdza to przed drukowaniem i nie zacznie, jeśli
+   sterownika nie znajdzie.
+3. Otwórz okno druku ręcznie, wybierz sterownik Bentley PDF i spróbuj
+   wydrukować jeden model. Jeśli to też nie działa, problem jest w sterowniku,
+   nie w makrze.
+4. Sprawdź, czy folder `PDF` obok DGN jest zapisywalny.
+5. Sprawdź log `PrintCorrectSize_<dgn>.log` w folderze `PDF`.
+6. Zamknij PDF w Acrobat/Reader przed ponownym uruchomieniem. Zablokowanego
+   pliku nie da się nadpisać; w logu pojawi się
+   `nie można usunąć starego PDF-a`.
 
-If your organisation uses a custom `.pltcfg` that locks the paper size, copy
-the standard `pdf.pltcfg`, enable paper size editing, and set `PDF_DRIVER` in
-the macro to the name of your copy.
+Timeout wynosi 180 sekund na jeden PDF. Przy bardzo dużych lub rastrowych
+modelach zwiększ `PDF_TIMEOUT_SEC` w źródle.
 
-A very large custom page can also exceed the driver's maximum form size. In
-that case the driver may clamp the page or fail to print.
+Jeśli sterownik jest znajdowany przez nietypową ścieżkę, możesz ustawić
+`CHECK_PDF_DRIVER = False` w źródle, ale wtedy makro nie sprawdzi sterownika
+przed drukowaniem.
 
-## The page size is wrong
+## Strona PDF ma standardowy rozmiar zamiast niestandardowego
 
-Run `Preview` first. The source is shown in brackets:
+Makro ustawia papier key-inami:
 
-- `[SHEET]` — the sheet model definition was used. Check
-  **Model Properties > Sheet > Size** in MicroStation.
-- `[SELECTION]` — something was selected when the macro ran. Clear the
-  selection or select the correct border.
-- `[BORDER LEVEL]` — the macro found elements on a level whose name matches
-  `BORDER_LEVEL_HINTS` (default: `RAMKA`, so `M_RAMKA` and ` _RAMKA` match).
-  If the level has a closed frame shape, the largest closed element is used;
-  otherwise the union of non-text elements on that level is used. Text and
-  dimensions are ignored, but other geometry on the frame level can still
-  enlarge the page.
-- `[CLOSED ELEMENT]` — the largest closed element was used. If the largest
-  closed element is not the page border, put the border on a recognised level
-  or select it manually.
-- `[EXTENTS]` — no border/sheet definition was found, so all geometry was
-  used. Elements outside the page will make the page larger.
+```text
+PRINT XFORM <szerokość> MM
+PRINT YFORM <wysokość> MM
+```
 
-The frame is measured as an axis-aligned rectangle. A frame rotated in the
-model is measured by its bounding box, which is larger than the frame. Use an
-axis-aligned frame for exact page sizes.
+To wymaga sterownika Bentley, który pozwala edytować rozmiar papieru. W oknie
+druku:
 
-### Manual override
+1. W oknie druku otwórz edytor konfiguracji sterownika. W zależności od
+   wersji V8i będzie to np. **File > Edit Printer Driver Configuration**,
+   **File > Edit Printer Driver** albo osobna ikona konfiguracji sterownika.
+2. Znajdź opcję w rodzaju **Allow paper size editing** i włącz ją.
+3. Zapisz konfigurację sterownika.
+4. Uruchom makro ponownie.
 
-For a design model, select the border (or all elements that define the page)
-before running the macro. The selection set is used as the page rectangle.
-This is the quickest way to fix a wrong automatic detection.
+Jeśli organizacja używa własnego `.pltcfg` z zablokowanym rozmiarem papieru,
+skopiuj standardowy `pdf.pltcfg`, włącz edycję papieru i ustaw `PDF_DRIVER` w
+makrze na nazwę swojej kopii.
 
-If the frame is inside a reference attachment rather than in the active model,
-the scan does not see it. Place the frame in the master model or select the
-page elements manually. A model that contains only references and no local
-graphics will be skipped as "no usable geometry".
+Bardzo duża strona niestandardowa może też przekroczyć maksymalny rozmiar
+formularza sterownika. Wtedy sterownik może ograniczyć stronę albo odmówić
+wydruku.
 
-## A4 sheets are still small, or large sheets are still clipped
+## Zły rozmiar strony
 
-This means the page size was not applied to the PDF. Check:
+Najpierw uruchom `Preview`. Źródło jest pokazane w nawiasach:
 
-1. The `Preview` output — does each model have a different size?
-2. The PDF page size in Acrobat: **File > Properties** (or the page size shown
-   in the PDF viewer).
-3. The driver's paper size editing setting (see above).
+- `[ARKUSZ]` — użyto definicji modelu arkusza. Sprawdź
+  **Model Properties > Sheet > Size**.
+- `[LEVEL RAMKI]` — znaleziono elementy na levelu pasującym do
+  `BORDER_LEVEL_HINTS` (domyślnie `RAMKA`, więc `M_RAMKA` i ` _RAMKA`).
+  Makro bierze większego kandydata: największy zamknięty element albo sumę
+  elementów innych niż tekst z tego levelu. Sprawdź, czy na levelu jest tylko
+  ramka, a nie dodatkowa geometria poza stroną.
+- `[ZAZNACZENIE]` — nie znaleziono ramki, ale coś było zaznaczone. Wyczyść
+  zaznaczenie albo zaznacz właściwe elementy strony.
+- `[ZAMKNIETY ELEMENT]` — użyto największego zamkniętego elementu. Jeśli to
+  nie jest ramka strony, umieść ramkę na rozpoznanym levelu albo zaznacz ją
+  ręcznie.
+- `[GRANICE]` — nie znaleziono ramki ani definicji arkusza, więc użyto
+  extents całej geometrii. Elementy poza stroną powiększą stronę.
 
-If the preview already shows the same size for every model, the detection is
-wrong, not the printing. Check the source in brackets and use a selection or
-the border level.
+Ramka jest mierzona jako prostokąt wyrównany do osi. Obrócona ramka jest
+mierzona przez prostokąt otaczający (bounding box), czyli większy prostokąt.
+Dla dokładnego rozmiaru używaj ramki wyrównanej do osi.
 
-### A4/A3 snapping
+### Ręczne wymuszenie rozmiaru
 
-A measured frame is snapped to exact A4 or A3 only when **both** sides are
-within 5 mm of the standard. For example:
+Dla modelu rysunkowego zaznacz ramkę (albo wszystkie elementy wyznaczające
+stronę) przed uruchomieniem makra. Zaznaczenie jest używane, gdy nie ma ramki
+na levelu.
+
+Jeśli ramka jest w referencji, a nie w aktywnym modelu, skan jej nie widzi.
+Umieść ramkę w modelu głównym albo zaznacz elementy strony ręcznie. Model
+zawierający wyłącznie referencje i brak geometrii lokalnej zostanie pominięty
+jako „brak geometrii”.
+
+## Dopasowanie A4/A3
+
+Zmierzona ramka jest zaokrąglana do dokładnego A4 albo A3 tylko wtedy, gdy
+**oba boki** mieszczą się w tolerancji 5 mm. Przykłady:
 
 - 212 × 299 mm → A4 (210 × 297 mm)
 - 300 × 423 mm → A3 (297 × 420 mm)
-- 216 × 300 mm → custom 216 × 300 mm (more than 5 mm from A4)
-- 420 × 594 mm → custom 420 × 594 mm (A2 is not in the default snap list)
+- 216 × 300 mm → wymiar rzeczywisty 216 × 300 mm (więcej niż 5 mm od A4)
+- 420 × 594 mm → wymiar rzeczywisty 420 × 594 mm (A2 nie jest domyślnie
+  zaokrąglane)
 
-The preview shows both the final page and the measured size. To snap other
-sizes, add them to `STANDARD_SIZES_TO_SNAP` (for example `A4,A3,A2,B1`).
-Every name must exist in `PaperDimensions` in the source.
+Podgląd pokazuje zarówno stronę końcową, jak i wymiar zmierzony. Aby
+zaokrąglać inne rozmiary, dopisz je do `STANDARD_SIZES_TO_SNAP`, np.
+`A4,A3,A2,B1`. Każda nazwa musi istnieć w funkcji `PaperDimensions` w źródle.
 
-## Extra PDFs are created
+## Powstają dodatkowe PDF-y
 
-The macro prints every selected model. By default all models are printed
-(`PRINT_ONLY_SHEETS_IF_PRESENT = False`). If a DGN contains sheet models and
-you want only those, set `PRINT_ONLY_SHEETS_IF_PRESENT = True`.
+Makro drukuje wszystkie modele wybrane do druku. Domyślnie
+`PRINT_ONLY_SHEETS_IF_PRESENT = False`, więc drukowane są wszystkie modele.
 
-If you get PDFs for models you do not want to print, options:
+Jeśli dostajesz PDF-y dla modeli, których nie chcesz drukować:
 
-- rename or remove the models you do not want to print,
-- add a model filter in the source,
-- or keep separate DGN files for source geometry and sheets.
+- usuń lub zmień nazwy niechcianych modeli,
+- ustaw `PRINT_ONLY_SHEETS_IF_PRESENT = True`, jeśli w pliku są modele arkuszy i
+  chcesz drukować tylko je,
+- albo dodaj filtr modeli w źródle.
 
-A per-model include/exclude list is not part of the current version.
+## Każdy obiekt to osobny plik DGN
 
-## One DGN per object
+Obecna wersja drukuje **aktywny plik DGN**. Jeśli każdy obiekt jest osobnym
+plikiem `.dgn`:
 
-The current version prints the **active DGN**. If each object is a separate
-`.dgn` file:
+1. Otwórz plik.
+2. Uruchom makro.
+3. Powtórz dla następnego pliku.
 
-1. Open the file.
-2. Run the macro.
-3. Repeat for the next file.
+Tryb batch na cały folder nie jest jeszcze dodany, ponieważ automatyczne
+otwieranie plików może porzucić niezapisane zmiany.
 
-A folder-batch mode is not included yet because opening files automatically
-can discard unsaved changes. If you need it, add it only with a workflow that
-saves and closes files first.
+## Rysunek jest minimalnie mniejszy od strony
 
-## The drawing is slightly smaller than the page
+Rozmiar strony PDF jest dokładny, ale sterownik PDF może dodać własne
+niewielkie marginesy. To normalne dla niektórych konfiguracji sterownika.
+Sprawdź marginesy w oknie konfiguracji sterownika.
 
-The PDF page size is exact, but the PDF driver may apply small internal
-margins. This is normal for some driver configurations. Check the driver's
-margins in the Printer Driver Configuration dialog.
+Jeśli rysunek jest znacznie mniejszy, `Maximize` dopasowuje stronę, której
+proporcje nie odpowiadają rysunkowi. Sprawdź, czy wykryty rozmiar jest
+poprawny.
 
-If the drawing is much smaller, `Maximize` is fitting a page whose aspect
-ratio does not match the drawing. Check that the detected size is correct.
+## Rysunek jest obcięty
 
-## The drawing is clipped
+Wykryta strona jest mniejsza niż rzeczywisty rysunek. Sprawdź podgląd i
+źródło:
 
-The detected page is smaller than the actual drawing. Check the preview and
-the source:
+- dla modelu arkusza sprawdź rozmiar arkusza,
+- dla levelu ramki sprawdź, czy level zawiera całą ramkę i czy nic nie jest
+  na ukrytym/zablokowanym levelu,
+- zaznacz pełną ramkę ręcznie.
 
-- for a sheet model, check the sheet size;
-- for a border level, make sure the level contains the whole border and
-  nothing is on a hidden/frozen level;
-- select the full border manually.
+## Makro zmienia fence albo aktywny model
 
-## The DGN or output folder contains spaces
+Makro używa tymczasowego fence'a i aktywuje kolejne modele podczas drukowania.
+Na końcu usuwa fence i wraca do modelu, który był aktywny przed uruchomieniem.
+Fence, który istniał wcześniej, nie jest odtwarzany. Zapisz plik i nie
+uruchamiaj makra, gdy potrzebujesz konkretnego fence'a.
 
-The macro normally converts the output folder to its Windows short path
-(`PROGRA~1` style) and replaces spaces in the file name with `_`. This avoids
-problems with the MicroStation key-in parser. If the volume does not provide
-short paths (some network shares), the macro falls back to quoting the path.
-If that still fails, use a DGN/output folder without spaces for the test.
+Makro nie modyfikuje istniejących elementów rysunku. Tworzy tylko tymczasowy fence i
+zmienia ustawienia druku.
 
-## The macro changes my fence or active model
+## Plik DGN jest tylko do odczytu
 
-The macro uses a temporary MicroStation fence and activates each model while
-printing. At the end it removes the fence and returns to the model that was
-active when the macro started. Any fence that existed before the run is not
-restored. Save your file and avoid running the macro while you need a
-specific fence.
+Drukowanie powinno działać, ale makro tworzy folder `PDF` obok DGN. Jeśli
+folder nie jest zapisywalny, makro się zatrzyma. Użyj zapisywalnej kopii DGN
+albo zmień `OUTPUT_SUBFOLDER` na zapisywalne miejsce.
 
-The macro does not change geometry.
+## Ścieżka DGN albo folderu zawiera spacje
 
-## The DGN is read-only
+Makro zwykle zamienia folder wyjściowy na krótką ścieżkę Windows
+(`PROGRA~1`), zastępuje spacje w nazwie pliku znakiem `_` i zamienia polskie
+znaki diakrytyczne w nazwie pliku na litery bez ogonków. To unika problemów
+z parserem key-inów. Jeśli wolumin nie udostępnia krótkich ścieżek (niektóre
+udziały sieciowe), makro ujmuje ścieżkę w cudzysłów. Jeśli to nadal nie
+działa, do testu użyj folderu bez spacji i najlepiej bez polskich znaków
+w ścieżce.
 
-Printing should still work, but the macro creates the `PDF` folder next to the
-DGN. If that folder is not writable, the macro stops. Use a writable copy of
-the DGN or change `OUTPUT_SUBFOLDER` to a writable location.
+## Wersja MicroStation
 
-## MicroStation version
-
-The macro targets MicroStation V8i and uses V8i VBA objects:
+Makro jest przeznaczone dla MicroStation V8i i korzysta z obiektów VBA V8i:
 
 - `ModelReference.GetSheetDefinition`
 - `Fence.DefineFromModelPoints`
-- the `PRINT ...` key-ins
+- key-inów `PRINT ...`
 
-MicroStation CONNECT has a different print API, so this exact source is not
-intended for CONNECT. The detection and file-handling parts can be adapted,
-but the print calls would need to be replaced.
+MicroStation CONNECT ma inne API drukowania, więc ten sam kod nie jest
+przewidziany dla CONNECT. Część odpowiedzialną za wykrywanie rozmiaru i pliki
+można zaadaptować, ale wywołania druku trzeba by zastąpić.

@@ -1,10 +1,11 @@
-# VBA source must be readable by MicroStation's import on Windows.
+# Źródło VBA musi być czytelne dla importu w MicroStation na Windows.
 *.bas text eol=crlf
 
-# Documentation stays LF for clean diffs.
+# Dokumentacja pozostaje LF dla czystych diffów.
 *.md text eol=lf
 LICENSE text eol=lf
 .gitignore text eol=lf
+.gitattributes text eol=lf
 
-# Binary VBA projects must never be line-ending converted.
+# Binarne projekty VBA nie mogą być konwertowane przez linie.
 *.mvba -text

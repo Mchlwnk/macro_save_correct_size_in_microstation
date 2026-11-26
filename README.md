@@ -1,189 +1,250 @@
-# PrintCorrectSize for MicroStation V8i
+# PrintCorrectSize dla MicroStation V8i
 
-A small VBA macro for MicroStation V8i that prints each model of a DGN to a
-**separate PDF with the correct page size**.
+Makro VBA do MicroStation V8i, które zapisuje każdy model z aktywnego pliku
+DGN do **osobnego PDF-a z poprawnym rozmiarem strony**.
 
-It solves the usual batch-print problem: when a project contains A4, A3 and
-custom-size sheets, choosing one paper size makes small sheets tiny and clips
-large sheets. This macro measures the frame in every model and sets the PDF
-page size individually.
+Rozwiązuje typowy problem drukowania zbiorczego: gdy w projekcie są arkusze
+A4, A3 i o niestandardowych wymiarach, wybranie jednego rozmiaru papieru
+powoduje, że mniejsze arkusze są pomniejszone, a większe są obcinane. To makro
+mierzy ramkę w każdym modelu i ustawia rozmiar strony w PDF.
 
-The primary workflow is: one DGN, several **design models**, each model has a
-frame on a level whose name contains `RAMKA` (for example `M_RAMKA` or
-` _RAMKA`).
+Podstawowy scenariusz: jeden plik DGN, wiele **modeli rysunkowych**, a każdy
+model ma własną ramkę na levelu, którego nazwa zawiera `RAMKA` — na przykład
+`M_RAMKA` albo ` _RAMKA`.
 
-> Status: source code is ready for testing on real drawings. Test it on a copy
-> of a DGN first. The repository intentionally contains source, not a compiled
-> `.mvba` binary, so it stays readable and reviewable.
+> **Status:** to jest wersja źródłowa do testów na prawdziwych rysunkach.
+> Najpierw sprawdź ją na kopii pliku DGN. Repozytorium celowo zawiera źródło
+> `.bas`, a nie gotowy plik `.mvba`, żeby kod był czytelny i możliwy do
+> sprawdzenia. Po udanym teście można zapisać projekt jako `.mvba` i dołączyć
+> go do wydania (Releases), żeby inni nie musieli importować modułu ręcznie.
 
-## What it does
+## Co robi makro
 
-- Prints all printable models of the active DGN, one PDF per model.
-- Measures the frame on the `RAMKA` level in every model.
-- Detects page size from:
-  1. a sheet model's sheet definition (if present),
-  2. elements on a frame level (`RAMKA`, `M_RAMKA`, ` _RAMKA`),
-  3. a selection set (fallback manual override),
-  4. the largest closed element,
-  5. the extents of all graphical elements.
-- Snaps to the exact A4 or A3 page when the measured frame is within 5 mm of
-  that size. Every other size keeps its measured width × height, including
-  other A/B sizes.
-- Sets the PDF page to the detected width × height (including custom sizes
-  such as 350 × 500 mm).
-- Uses MicroStation's built-in Bentley PDF driver (`pdf.pltcfg`), so no
-  external PDF printer is required.
-- Writes a `PrintCorrectSize_<dgn>.log` with the detected sizes and results.
-- Provides a preview mode that only lists the detected sizes.
+- Drukuje wszystkie modele wybrane do wydruku z aktywnego DGN, każdy do
+  osobnego PDF-a.
+- Mierzy ramkę na levelu `RAMKA` w modelach rysunkowych.
+- Rozpoznaje rozmiar strony w tej kolejności:
+  1. definicja arkusza w modelu arkusza (jeśli występuje),
+  2. elementy na levelu ramki (`RAMKA`, `M_RAMKA`, ` _RAMKA`),
+  3. zaznaczenie elementów (awaryjnie, gdy nie ma ramki),
+  4. największy zamknięty element,
+  5. extents wszystkich elementów graficznych.
+- Jeśli zmierzona ramka odbiega od A4 albo A3 o **maksymalnie 5 mm na każdym
+  boku**, strona jest zaokrąglana do dokładnego A4/A3.
+- Pozostałe rozmiary, w tym A0–A2 i rozmiary B, zachowują **rzeczywisty
+  zmierzony wymiar**.
+- Ustawia stronę PDF na wykrytą szerokość × wysokość, także dla nietypowych
+  wymiarów, np. 350 × 500 mm.
+- Korzysta z wbudowanego sterownika Bentley PDF (`pdf.pltcfg`) i
+  udokumentowanych key-inów `PRINT ...`, więc nie trzeba instalować
+  zewnętrznego PDF Creatora.
+- Zapisuje log `PrintCorrectSize_<dgn>.log` z rozmiarami i wynikami.
+- Ma tryb podglądu, który tylko pokazuje wykryte rozmiary i nie tworzy PDF-ów.
 
-## Requirements
+## Wymagania
 
-- MicroStation V8i (SELECTseries) with VBA.
-- Design models with a frame on a level whose name contains `RAMKA`
-  (`M_RAMKA`, ` _RAMKA`). Other frame-level names can be configured.
-- The standard Bentley PDF driver `pdf.pltcfg` installed and available through
+- MicroStation V8i (SELECTseries) z VBA.
+- Modele rysunkowe z ramką na levelu, którego nazwa zawiera `RAMKA`
+  (`M_RAMKA`, ` _RAMKA`). Inne nazwy leveli można skonfigurować.
+- Standardowy sterownik Bentley PDF `pdf.pltcfg` dostępny przez
   `MS_PLTCFG_PATH`.
-- The driver must allow paper size editing. Bentley PDF drivers normally do.
+- Sterownik musi pozwalać na edycję rozmiaru papieru. Sterowniki Bentley PDF
+  zwykle to umożliwiają.
 
-## Installation
+## Instalacja
 
-1. Download [`src/PrintCorrectSize.bas`](src/PrintCorrectSize.bas).
-2. In MicroStation, open **Utilities > Macro > Project Manager**
-   (in some V8i versions: **Tools > VBA > Project Manager**).
-3. Create a new VBA project named `PrintCorrectSize` and save it as
-   `PrintCorrectSize.mvba` in a folder that MicroStation searches for macros,
-   for example:
-   `...\Workspace\Standards\Macros\vba`.
-4. Open the VBA editor and choose **File > Import File...**.
-5. Select `PrintCorrectSize.bas`.
-6. Save the VBA project.
-7. Load the project in the Project Manager if it is not loaded yet.
+1. Pobierz [`src/PrintCorrectSize.bas`](src/PrintCorrectSize.bas).
+2. W MicroStation otwórz **Utilities > Macro > Project Manager**
+   (w niektórych wersjach V8i: **Tools > VBA > Project Manager**).
+3. Utwórz nowy projekt VBA o nazwie `PrintCorrectSize` i zapisz go jako
+   `PrintCorrectSize.mvba` w folderze, który MicroStation przeszukuje, np.:
+   `...\Workspace\Standards\vba`.
+4. Otwórz edytor VBA i wybierz **File > Import File...**.
+5. Wskaż `PrintCorrectSize.bas`.
+6. Zapisz projekt VBA.
+7. Jeśli projekt nie jest załadowany, załaduj go w Project Managerze.
 
-Detailed instructions, including how to find the right folder, are in
+Jeśli zapiszesz projekt poza folderami z `MS_VBASEARCHDIRECTORIES`, przed
+uruchomieniem załaduj go ręcznie:
+
+```text
+vba load "C:\...\PrintCorrectSize.mvba"
+```
+
+Pełna instrukcja, w tym alternatywne ścieżki i uruchamianie przez key-in:
 [`docs/INSTALL.md`](docs/INSTALL.md).
 
-## Usage
+## Uruchomienie
 
-1. Open the DGN you want to print.
-2. Save the file.
-3. Run the preview first:
+1. Otwórz plik DGN do wydruku.
+2. Zapisz plik.
+3. Najpierw uruchom podgląd:
 
    ```text
    vba run [PrintCorrectSize]PrintCorrectSize.Preview
    ```
 
-   Check the list of models and detected page sizes.
+   Sprawdź listę modeli, wykryte rozmiary i źródło w nawiasach. Przykład
+   wpisu:
 
-4. Run the main macro:
+   ```text
+   01. Mapa_A4  ->  210.0 x 297.0 mm  [LEVEL RAMKI]  ->  A4 (zmierzono 212.0 x 299.0 mm)
+   02. Mapa_A3  ->  297.0 x 420.0 mm  [LEVEL RAMKI]  ->  A3 (zmierzono 299.0 x 421.0 mm)
+   03. Mapa_X   ->  350.0 x 500.0 mm  [LEVEL RAMKI]
+   ```
+
+4. Uruchom główne makro:
 
    ```text
    vba run [PrintCorrectSize]PrintCorrectSize.Main
    ```
 
-   You can also run both from **Utilities > Macros**.
+   Oba makra są też dostępne w **Utilities > Macros**.
 
-5. The PDFs are written to a `PDF` sub-folder next to the DGN:
+5. PDF-y trafiają do podfolderu `PDF` obok pliku DGN:
 
    ```text
-   <dgn-name>_<model-name>.pdf
+   <nazwa-dgn>_<nazwa-modelu>.pdf
    ```
 
-   If only one model is printed, the name is `<dgn-name>.pdf`. Spaces and
-   characters that are invalid in Windows file names are replaced by `_`.
+   Jeśli drukowany jest tylko jeden model, nazwa to `<nazwa-dgn>.pdf`.
+   Spacje i znaki niedozwolone w nazwach plików Windows są zamieniane na `_`,
+   a polskie znaki diakrytyczne na litery bez ogonków (np. `Ł` → `L`).
 
-## How the page size is detected
+## Jak wykrywany jest rozmiar strony
 
-The first matching rule wins:
+Wygrywa pierwsza pasująca reguła:
 
-| Order | Source | When it is used |
+| Kolejność | Źródło w podglądzie | Kiedy jest używane |
 |---|---|---|
-| 1 | `SHEET` | The model is a sheet model and has a valid sheet definition. |
-| 2 | `BORDER LEVEL` | Elements exist on a level whose name contains one of the hints from `BORDER_LEVEL_HINTS`. The default `RAMKA` matches `M_RAMKA` and ` _RAMKA`. |
-| 3 | `SELECTION` | No frame was found, but something is selected in the model. Select the border or the elements that define the page. |
-| 4 | `CLOSED ELEMENT` | The largest closed element (usually a rectangle) is used. |
-| 5 | `EXTENTS` | Fallback: the extents of all graphical elements. |
+| 1 | `ARKUSZ` | Model jest modelem arkusza (sheet model) i ma poprawną definicję arkusza. |
+| 2 | `LEVEL RAMKI` | Na levelu, którego nazwa zawiera frazę z `BORDER_LEVEL_HINTS`, są elementy. Domyślne `RAMKA` pasuje do `M_RAMKA` i ` _RAMKA`. |
+| 3 | `ZAZNACZENIE` | Nie znaleziono ramki, ale coś jest zaznaczone w modelu. Zaznacz ramkę lub elementy wyznaczające stronę. |
+| 4 | `ZAMKNIETY ELEMENT` | Używany jest największy zamknięty element (zwykle prostokąt). |
+| 5 | `GRANICE` | Rozwiązanie awaryjne: extents wszystkich elementów graficznych. |
 
-For a design model with a frame on `M_RAMKA` or ` _RAMKA`, the frame is
-measured and that is the page. If the frame is a closed shape, the macro uses
-the largest closed element on the frame level; if the frame is drawn from
-lines, it uses the union of the non-text elements on that level. Text and
-dimensions on the frame level are ignored so notes outside the frame do not
-enlarge the page.
+Dla modelu rysunkowego z ramką na `M_RAMKA` albo ` _RAMKA` mierzona jest
+ramka i to jest strona. Makro bierze większego z dwóch kandydatów:
+największy zamknięty element na levelu ramki albo sumę elementów innych niż
+tekst z tego levelu. Dzięki temu zamknięta ramka wygrywa, a gdy ramka jest
+z linii — suma linii wygrywa z mniejszym blokiem tytułowym. Tekst i wymiary
+na levelu ramki są ignorowane, żeby notatki poza ramką nie powiększały strony.
 
-For a sheet model, MicroStation's own sheet size is authoritative. The
-selection set is only a fallback for unusual models without a frame: select
-the page border before running the macro.
+Dla modelu arkusza (sheet model) rozmiar z MicroStation jest nadrzędny.
+Zaznaczenie jest tylko rozwiązaniem awaryjnym dla nietypowych modeli bez
+ramki: zaznacz obrys strony przed uruchomieniem makra.
 
-By default `PRINT_ONLY_SHEETS_IF_PRESENT` is `False`, so every model is printed
-when there are no sheet models. If a DGN does contain sheet models and you
-want only those, set it to `True`.
+Domyślnie `PRINT_ONLY_SHEETS_IF_PRESENT` ma wartość `False`, więc drukowane
+są wszystkie modele, gdy nie ma modeli arkuszy. Jeśli w DGN są modele arkuszy i
+chcesz drukować tylko je, ustaw tę stałą na `True`.
 
-## Configuration
+## Dopasowanie A4/A3
 
-All settings are constants at the top of `PrintCorrectSize.bas`:
+Tolerancja dotyczy **każdego boku osobno** i domyślnie wynosi 5 mm. Przykłady:
 
-| Constant | Default | Meaning |
+| Zmierzona ramka | Wynik |
+|---|---|
+| 212 × 299 mm | A4, strona 210 × 297 mm |
+| 300 × 423 mm | A3, strona 297 × 420 mm |
+| 299 × 212 mm | A4 poziomo, strona 297 × 210 mm |
+| 216 × 300 mm | wymiar rzeczywisty 216 × 300 mm (za daleko od A4) |
+| 420 × 594 mm | wymiar rzeczywisty 420 × 594 mm (A2 nie jest domyślnie zaokrąglane) |
+| 707 × 1000 mm | wymiar rzeczywisty 707 × 1000 mm (B1 nie jest domyślnie zaokrąglane) |
+
+Jeśli chcesz zaokrąglać także inne rozmiary A/B, dopisz je do
+`STANDARD_SIZES_TO_SNAP`, np. `A4,A3,A2,B1`. Każda nazwa musi istnieć w
+funkcji `PaperDimensions` w źródle.
+
+## Konfiguracja
+
+Wszystkie ustawienia to stałe na początku `PrintCorrectSize.bas`:
+
+| Stała | Domyślnie | Znaczenie |
 |---|---|---|
-| `PDF_DRIVER` | `pdf.pltcfg` | Bentley PDF plot driver. |
-| `CHECK_PDF_DRIVER` | `True` | Check that the driver exists before printing. |
-| `OUTPUT_SUBFOLDER` | `PDF` | Sub-folder for PDFs; `""` writes next to the DGN. |
-| `BORDER_LEVEL_HINTS` | `RAMKA` | Comma-separated, case-insensitive level-name fragments. Matches `M_RAMKA` and ` _RAMKA`. |
-| `USE_SELECTION_AS_PAGE` | `True` | Use a selection set as a fallback when no frame is found. |
-| `PRINT_ONLY_SHEETS_IF_PRESENT` | `False` | If sheet models exist, print only them. |
-| `STANDARD_SIZES_TO_SNAP` | `A4,A3` | Sizes that are snapped to exact ISO dimensions. |
-| `STANDARD_SIZE_TOLERANCE_MM` | `5` | Maximum difference from a standard size, per side, for snapping. |
-| `MIN_PAGE_MM` | `40` | Reject detected pages smaller than this. |
-| `MAX_PAGE_MM` | `10000` | Reject detected pages larger than this. |
-| `PDF_TIMEOUT_SEC` | `180` | Wait time for one PDF. |
-| `WRITE_LOG` | `True` | Write a log next to the PDFs. |
+| `PDF_DRIVER` | `pdf.pltcfg` | Sterownik Bentley PDF. |
+| `CHECK_PDF_DRIVER` | `True` | Sprawdź, czy sterownik istnieje, przed drukowaniem. |
+| `OUTPUT_SUBFOLDER` | `PDF` | Podfolder na PDF-y; `""` zapisuje obok DGN. |
+| `BORDER_LEVEL_HINTS` | `RAMKA` | Fragmenty nazw leveli, oddzielone przecinkami, bez rozróżniania wielkości liter. Pasuje do `M_RAMKA` i ` _RAMKA`. |
+| `USE_SELECTION_AS_PAGE` | `True` | Użyj zaznaczenia, gdy nie znaleziono ramki. |
+| `PRINT_ONLY_SHEETS_IF_PRESENT` | `False` | Jeśli są modele arkuszy, drukuj tylko je. |
+| `STANDARD_SIZES_TO_SNAP` | `A4,A3` | Rozmiary zaokrąglane do dokładnych wymiarów ISO. |
+| `STANDARD_SIZE_TOLERANCE_MM` | `5` | Maksymalna różnica od rozmiaru standardowego, na każdym boku. |
+| `MIN_PAGE_MM` | `40` | Odrzucaj wykryte strony mniejsze niż to. |
+| `MAX_PAGE_MM` | `10000` | Odrzucaj wykryte strony większe niż to. |
+| `PDF_TIMEOUT_SEC` | `180` | Czas oczekiwania na jeden PDF. |
+| `WRITE_LOG` | `True` | Zapisz log obok PDF-ów. |
 
-## Important notes
+## Ważne uwagi
 
-- The macro changes the active model and creates/removes a MicroStation fence.
-  Save your file before running it.
-- It does not modify drawing geometry. It only changes print settings and the
-  temporary fence.
-- It prints the active DGN. If every object is a separate DGN file, run the
-  macro once per file (a safe folder-batch mode may be added later).
-- A4 and A3 are snapped to their exact ISO dimensions when the measured frame
-  is within 5 mm. Other sizes, including A0–A2 and B-series, keep the measured
-  width × height. The preview shows both the final page and the measured size.
-- The PDF driver may still apply its own small internal margins, so the
-  drawing can be a fraction of a millimetre smaller than the page.
-- Custom sizes depend on the driver's paper size editing support. If the
-  driver ignores `PRINT XFORM` / `PRINT YFORM`, use a Bentley PDF driver that
-  allows editing the paper size.
+- Makro zmienia aktywny model i tworzy/usuwa fence w MicroStation. Zapisz
+  plik przed uruchomieniem.
+- Makro nie modyfikuje istniejących elementów rysunku. Tworzy tylko tymczasowy fence i
+  zmienia ustawienia druku.
+- Makro działa na aktywnym pliku DGN. Jeśli każdy obiekt to osobny plik DGN,
+  uruchom makro w każdym pliku.
+- Domyślnie drukowane są **wszystkie modele**. Jeśli któryś model nie jest
+  obiektem do wydruku, będzie widoczny w podglądzie — usuń go, zmień nazwę
+  albo ustaw `PRINT_ONLY_SHEETS_IF_PRESENT`.
+- A4 i A3 są zaokrąglane do dokładnych wymiarów ISO, jeśli zmierzona ramka
+  odbiega o maksymalnie 5 mm na każdym boku. Inne rozmiary, w tym A0–A2 i B,
+  zachowują rzeczywisty zmierzony wymiar.
+- Sterownik PDF może dodać własne niewielkie marginesy, więc rysunek może być
+  minimalnie mniejszy od strony.
+- Niestandardowe rozmiary zależą od możliwości edycji papieru w sterowniku.
+  Jeśli sterownik ignoruje `PRINT XFORM` / `PRINT YFORM`, użyj sterownika
+  Bentley PDF, który pozwala edytować rozmiar papieru.
+- Ramka jest mierzona jako prostokąt wyrównany do osi. Obrócona ramka da
+  prostokąt otaczający (bounding box), czyli większy rozmiar.
+- Ramka w referencji nie jest widziana przez skan aktywnego modelu. Umieść
+  ramkę w modelu głównym albo zaznacz elementy strony ręcznie.
+- Model zawierający wyłącznie referencje i brak geometrii lokalnej zostanie
+  pominięty jako „brak geometrii”.
 
-## Troubleshooting
+## Testowanie
 
-See [`docs/TROUBLESHOOTING.md`](docs/TROUBLESHOOTING.md).
+Przed użyciem na produkcyjnych rysunkach przejdź przez
+[`docs/TEST_CHECKLIST.md`](docs/TEST_CHECKLIST.md).
 
-Quick checks:
+## Problemy
 
-- PDF is missing or the log says `FAIL`: verify that `pdf.pltcfg` is installed
-  and that `MS_PLTCFG_PATH` points to its folder.
-- Page size is wrong: run `Preview`, check the source in brackets, and select
-  the page border before running the macro if needed.
-- Extra PDFs: the DGN contains models you do not want to print. By default all
-  models are printed; remove or rename unwanted models, or set
-  `PRINT_ONLY_SHEETS_IF_PRESENT` if the file contains sheet models.
-- Macro not found: the project is not loaded, or the project name is not
+Zobacz [`docs/TROUBLESHOOTING.md`](docs/TROUBLESHOOTING.md).
+
+Szybka lista:
+
+- Brak PDF-a lub `BLAD` w logu: sprawdź, czy `pdf.pltcfg` jest zainstalowany,
+  a `MS_PLTCFG_PATH` wskazuje jego folder.
+- Zły rozmiar strony: uruchom `Preview`, sprawdź źródło w nawiasach i w razie
+  potrzeby zaznacz obrys strony przed uruchomieniem makra.
+- Dodatkowe PDF-y: w DGN są modele, których nie chcesz drukować. Usuń je,
+  zmień nazwy albo ustaw `PRINT_ONLY_SHEETS_IF_PRESENT`.
+- Nie ma makra: projekt nie jest załadowany albo nazwa projektu nie jest
   `PrintCorrectSize`.
+- PDF jest otwarty w Acrobat/Reader: zamknij go przed ponownym uruchomieniem,
+  bo starego pliku nie da się nadpisać.
 
-## Repository layout
+## Uwaga o polskich znakach w kodzie
+
+Plik `PrintCorrectSize.bas` jest zapisany w ASCII, bez polskich znaków
+diakrytycznych. To celowe: import źródeł VBA w MicroStation V8i może
+interpretować plik w kodowaniu systemowym i uszkodzić znaki diakrytyczne.
+Dlatego w podglądzie i logu zobaczysz np. `ZAMKNIETY ELEMENT`, `POMINIETY`
+albo `BLAD`, a nie `ZAMKNIĘTY`, `POMINIĘTY`, `BŁĄD`. Dokumentacja używa
+pełnej polszczyzny.
+
+## Struktura repozytorium
 
 ```text
-src/PrintCorrectSize.bas      Macro source (import this into a VBA project)
-docs/INSTALL.md               Detailed installation instructions
-docs/TEST_CHECKLIST.md        Checklist for testing on real drawings
-docs/TROUBLESHOOTING.md       Common problems and fixes
-README.pl.md                  Polish version of this README
-LICENSE                       MIT license
+src/PrintCorrectSize.bas      źródło makra (import do projektu VBA)
+docs/INSTALL.md               pełna instrukcja instalacji
+docs/TEST_CHECKLIST.md        lista kontrolna testów na rysunkach
+docs/TROUBLESHOOTING.md       typowe problemy i rozwiązania
+README.md                     ten plik
+LICENSE                       licencja MIT
 ```
 
-## License
+## Licencja
 
-MIT. See [LICENSE](LICENSE).
+MIT. Zobacz [LICENSE](LICENSE).
 
-MicroStation and Bentley are trademarks of Bentley Systems, Incorporated.
-This project is not affiliated with or endorsed by Bentley Systems.
+MicroStation i Bentley są znakami towarowymi Bentley Systems, Incorporated.
+Projekt nie jest powiązany z Bentley Systems ani przez nią autoryzowany.

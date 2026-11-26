@@ -1,4 +1,4 @@
-# Local output and test files
+# Lokalne pliki wyjściowe i testowe
 *.pdf
 *.log
 *.dgn
@@ -6,11 +6,11 @@
 *.bak
 *.tmp
 
-# MicroStation / VBA lock files
+# Pliki blokad MicroStation / VBA
 ~$*
 *.lck
 
-# Editor / OS noise
+# Pliki systemowe i edytorów
 .DS_Store
 Thumbs.db
 desktop.ini

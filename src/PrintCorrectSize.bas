@@ -2,78 +2,81 @@ Attribute VB_Name = "PrintCorrectSize"
 '==============================================================================
 ' PrintCorrectSize
 '
-' MicroStation V8i VBA macro.
+' Makro VBA dla MicroStation V8i.
 '
-' Prints every printable model of the active DGN to a separate PDF and sets
-' the PDF page size to the size of that model. This avoids the usual problem
-' where one paper size is used for a whole batch: A4 sheets become small and
-' larger sheets are clipped.
+' Zapisuje kazdy model do druku z aktywnego pliku DGN do osobnego PDF-a
+' i ustawia rozmiar strony PDF na rozmiar tego modelu. Rozwiazuje typowy
+' problem drukowania zbiorczego: przy jednym rozmiarze papieru arkusze A4
+' sa pomniejszone, a wieksze arkusze sa obcinane.
 '
-' Page size is detected in this order:
-'   1. Sheet model definition (Model Properties > Sheet > Size)
-'   2. Elements on a frame level (name contains one of BORDER_LEVEL_HINTS)
-'   3. A selection set in the model (if anything is selected)  -> fallback override
-'   4. Largest closed element in the model
-'   5. Extents of all graphical elements in the model
+' Rozmiar strony jest wykrywany w tej kolejnosci:
+'   1. definicja arkusza w sheet modelu (Model Properties > Sheet > Size)
+'   2. elementy na levelu ramki (nazwa zawiera jedna z BORDER_LEVEL_HINTS)
+'   3. zaznaczenie w modelu (jesli cos jest zaznaczone) -> rozwiazanie awaryjne
+'   4. najwiekszy zamkniety element w modelu
+'   5. granice (extents) wszystkich elementow graficznych w modelu
 '
-' A measured page within STANDARD_SIZE_TOLERANCE_MM of A4 or A3 is snapped to
-' the exact ISO size. Other sizes keep their measured width and height.
+' Zmierzona strona w granicach STANDARD_SIZE_TOLERANCE_MM od A4 albo A3 jest
+' zaokraglana do dokladnego rozmiaru ISO. Pozostale rozmiary zachowuja
+' zmierzona szerokosc i wysokosc.
 '
-' The macro uses MicroStation's built-in Bentley PDF driver (pdf.pltcfg) and
-' the documented PRINT ... key-ins, so no external PDF printer is required.
+' Makro korzysta z wbudowanego sterownika Bentley PDF (pdf.pltcfg) i z
+' udokumentowanych key-inow PRINT ..., wiec nie potrzeba zewnetrznego
+' PDF Creatora.
 '
-' Target: MicroStation V8i (SELECTseries). VBA 6/7.
+' Cel: MicroStation V8i (SELECTseries), VBA 6/7.
 '==============================================================================
 
 Option Explicit
 
 '------------------------------------------------------------------------------
-' User-editable settings
+' Ustawienia do edycji przez uzytkownika
 '------------------------------------------------------------------------------
 
-' Bentley PDF plot driver. The file is searched through MS_PLTCFG_PATH.
+' Sterownik Bentley PDF. Plik jest szukany przez MS_PLTCFG_PATH.
 Private Const PDF_DRIVER As String = "pdf.pltcfg"
 
-' Check that PDF_DRIVER exists before touching the drawing. Set to False if
-' your driver is found through a path that MS_PLTCFG_PATH does not list.
+' Sprawdz, czy PDF_DRIVER istnieje, zanim makro zacznie dzialac na rysunku.
+' Ustaw False, jesli sterownik jest znajdowany przez sciezke spoza
+' MS_PLTCFG_PATH.
 Private Const CHECK_PDF_DRIVER As Boolean = True
 
-' Output sub-folder created next to the DGN. Use "" to write next to the DGN.
+' Podfolder tworzony obok pliku DGN. Ustaw "", aby zapisywac obok DGN.
 Private Const OUTPUT_SUBFOLDER As String = "PDF"
 
-' Level names (or parts of names) used for the sheet border. Case-insensitive.
-' Separate names with a comma. Leave "" to skip this detection step.
-' "RAMKA" matches both "M_RAMKA" and " _RAMKA".
+' Fragmenty nazw leveli ramki. Wielkosc liter nie ma znaczenia.
+' Oddzielaj przecinkami. Ustaw "", aby pominac ten etap wykrywania.
+' "RAMKA" pasuje do "M_RAMKA" i " _RAMKA".
 Private Const BORDER_LEVEL_HINTS As String = "RAMKA"
 
-' If True, a selection set is used as a fallback when no frame is found.
-' A sheet model's sheet definition and a frame level always win.
+' Jesli True, zaznaczenie jest uzywane awaryjnie, gdy nie ma ramki.
+' Definicja sheet modelu i level ramki zawsze maja pierwszenstwo.
 Private Const USE_SELECTION_AS_PAGE As Boolean = True
 
-' If a DGN contains sheet models, print only the sheet models. Design models
-' in such a file are usually the source geometry, not printable sheets.
-' Default is False because this macro is intended for design models that each
-' contain their own frame.
+' Jesli DGN zawiera sheet modele, drukuj tylko je. Modele rysunkowe w takim
+' pliku to zwykle geometria zrodlowa, a nie arkusze do wydruku.
+' Domyslnie False, bo to makro jest przeznaczone dla modeli rysunkowych,
+' z ktorych kazdy ma wlasna ramke.
 Private Const PRINT_ONLY_SHEETS_IF_PRESENT As Boolean = False
 
-' Standard sizes that are snapped to the exact ISO paper size.
-' Only these names are snapped; every other size keeps its measured width and
-' height. Default: A4 and A3 with a 5 mm tolerance.
+' Rozmiary standardowe, ktore sa zaokraglane do dokladnego wymiaru ISO.
+' Tylko te nazwy sa zaokraglane; pozostale rozmiary zachowuja zmierzona
+' szerokosc i wysokosc. Domyslnie A4 i A3 z tolerancja 5 mm.
 Private Const STANDARD_SIZES_TO_SNAP As String = "A4,A3"
 Private Const STANDARD_SIZE_TOLERANCE_MM As Double = 5#
 
-' Sanity limits for a detected page (millimetres).
+' Rozsadne granice wykrytej strony (milimetry).
 Private Const MIN_PAGE_MM As Double = 40#
 Private Const MAX_PAGE_MM As Double = 10000#
 
-' How long to wait for one PDF before giving up (seconds).
+' Ile sekund czekac na jeden PDF, zanim makro uzna, ze sie nie udalo.
 Private Const PDF_TIMEOUT_SEC As Long = 180
 
-' Write a small log next to the PDFs.
+' Zapisz krotki log obok PDF-ow.
 Private Const WRITE_LOG As Boolean = True
 
 '------------------------------------------------------------------------------
-' Private types and module state
+' Typy prywatne i stan modulu
 '------------------------------------------------------------------------------
 
 Private Type BBox
@@ -100,20 +103,20 @@ Private m_fso As Object
 Private m_logPath As String
 
 '==============================================================================
-' Public entry points
+' Publiczne punkty wejscia
 '==============================================================================
 
-' Main entry point. Prints all models of the active DGN to separate PDFs.
+' Glowne wejscie. Drukuje wszystkie modele z aktywnego DGN do osobnych PDF-ow.
 Public Sub Main()
     PrintCorrectSize
 End Sub
 
-' Shows what would be printed, without creating PDFs.
+' Pokazuje, co zostaloby wydrukowane, bez tworzenia PDF-ow.
 Public Sub Preview()
     PreviewCorrectSize
 End Sub
 
-' Prints all models of the active DGN to separate PDFs.
+' Drukuje wszystkie modele z aktywnego DGN do osobnych PDF-ow.
 Public Sub PrintCorrectSize()
     Dim df As DesignFile
     Dim models As ModelReferences
@@ -136,19 +139,19 @@ Public Sub PrintCorrectSize()
     Dim answer As VbMsgBoxResult
 
     If Not Application.HasActiveDesignFile Then
-        MsgBox "Open a DGN file first.", vbExclamation, "PrintCorrectSize"
+        MsgBox "Najpierw otworz plik DGN.", vbExclamation, "PrintCorrectSize"
         Exit Sub
     End If
 
     Set df = ActiveDesignFile
     Set models = df.Models
     If models.Count = 0 Then
-        MsgBox "The active DGN has no models.", vbExclamation, "PrintCorrectSize"
+        MsgBox "Aktywny plik DGN nie ma modeli.", vbExclamation, "PrintCorrectSize"
         Exit Sub
     End If
 
     If Len(df.FullName) = 0 Then
-        MsgBox "Save the DGN file before printing.", vbExclamation, "PrintCorrectSize"
+        MsgBox "Zapisz plik DGN przed drukowaniem.", vbExclamation, "PrintCorrectSize"
         Exit Sub
     End If
 
@@ -157,16 +160,16 @@ Public Sub PrintCorrectSize()
     On Error GoTo 0
     Err.Clear
     If m_fso Is Nothing Then
-        MsgBox "Cannot start Scripting.FileSystemObject.", vbExclamation, "PrintCorrectSize"
+        MsgBox "Nie mozna uruchomic Scripting.FileSystemObject.", vbExclamation, "PrintCorrectSize"
         Exit Sub
     End If
 
     If CHECK_PDF_DRIVER Then
         If Not PrintDriverExists(PDF_DRIVER) Then
-            MsgBox "Cannot find the Bentley PDF driver '" & PDF_DRIVER & "'." & vbCrLf & vbCrLf & _
-                   "Check that the driver is installed and that MS_PLTCFG_PATH points " & _
-                   "to its folder. You can change PDF_DRIVER at the top of the macro, " & _
-                   "or set CHECK_PDF_DRIVER to False.", _
+            MsgBox "Nie znaleziono sterownika Bentley PDF '" & PDF_DRIVER & "'." & vbCrLf & vbCrLf & _
+                   "Sprawdz, czy sterownik jest zainstalowany i czy MS_PLTCFG_PATH " & _
+                   "wskazuje jego folder. Mozesz zmienic PDF_DRIVER na poczatku makra " & _
+                   "albo ustawic CHECK_PDF_DRIVER na False.", _
                    vbExclamation, "PrintCorrectSize"
             Exit Sub
         End If
@@ -176,7 +179,7 @@ Public Sub PrintCorrectSize()
     If outFolder = "" Then Exit Sub
 
     If Not EnsureFolder(outFolder) Then
-        MsgBox "Cannot create the output folder:" & vbCrLf & outFolder, vbExclamation, "PrintCorrectSize"
+        MsgBox "Nie mozna utworzyc folderu wyjsciowego:" & vbCrLf & outFolder, vbExclamation, "PrintCorrectSize"
         Exit Sub
     End If
 
@@ -185,7 +188,7 @@ Public Sub PrintCorrectSize()
         m_logPath = m_fso.BuildPath(outFolder, _
                     "PrintCorrectSize_" & SanitizeFileName(m_fso.GetBaseName(df.FullName)) & ".log")
         On Error Resume Next
-        m_fso.CreateTextFile m_logPath, True
+        m_fso.CreateTextFile m_logPath, True, True
         On Error GoTo 0
         Err.Clear
     End If
@@ -194,7 +197,7 @@ Public Sub PrintCorrectSize()
     BuildPrintList models, printModels, n
 
     If n = 0 Then
-        MsgBox "No printable models found.", vbExclamation, "PrintCorrectSize"
+        MsgBox "Nie znaleziono modeli do wydruku.", vbExclamation, "PrintCorrectSize"
         Exit Sub
     End If
 
@@ -202,8 +205,8 @@ Public Sub PrintCorrectSize()
     ReDim names(0 To n - 1)
     ReDim paths(0 To n - 1)
 
-    ' Scan models. Activation is needed for the selection set and for a
-    ' reliable per-model scan in V8i.
+    ' Skanuj modele. Aktywacja jest potrzebna dla zaznaczenia i dla pewnego
+    ' skanowania kazdego modelu w V8i.
     For i = 1 To n
         Set m = printModels(i - 1)
         m.Activate
@@ -214,45 +217,45 @@ Public Sub PrintCorrectSize()
     Next i
     originalModel.Activate
 
-    ' Build a short report and ask for confirmation.
-    summary = "Active DGN: " & df.FullName & vbCrLf & _
-              "Output: " & outFolder & vbCrLf & vbCrLf
+    ' Zbuduj krotki raport i popros o potwierdzenie.
+    summary = "Aktywny DGN: " & df.FullName & vbCrLf & _
+              "Folder wyjsciowy: " & outFolder & vbCrLf & vbCrLf
 
     For i = 0 To n - 1
         If infos(i).Valid Then
             summary = summary & Format$(i + 1, "00") & ". " & names(i) & _
                       "  ->  " & Format$(infos(i).WidthMM, "0.0") & " x " & _
                       Format$(infos(i).HeightMM, "0.0") & " mm  [" & infos(i).Source & "]"
-            If infos(i).Paper <> "CUSTOM" Then
+            If infos(i).Paper <> "WLASNY" Then
                 summary = summary & "  ->  " & infos(i).Paper & _
-                          " (measured " & Format$(infos(i).MeasuredWidthMM, "0.0") & " x " & _
+                          " (zmierzono " & Format$(infos(i).MeasuredWidthMM, "0.0") & " x " & _
                           Format$(infos(i).MeasuredHeightMM, "0.0") & " mm)"
             End If
             summary = summary & vbCrLf
         Else
             summary = summary & Format$(i + 1, "00") & ". " & names(i) & _
-                      "  ->  SKIPPED (no usable geometry)" & vbCrLf
+                      "  ->  POMINIETY (brak geometrii)" & vbCrLf
         End If
     Next i
 
-    summary = summary & vbCrLf & "Create these PDF files?"
+    summary = summary & vbCrLf & "Utworzyc te pliki PDF?"
     answer = MsgBox(summary, vbOKCancel + vbInformation, "PrintCorrectSize")
     If answer <> vbOK Then Exit Sub
 
-    ' One-time print setup.
+    ' Jednorazowa konfiguracja drukowania.
     driverArg = PDF_DRIVER
     If InStr(driverArg, " ") > 0 Then driverArg = Chr$(34) & driverArg & Chr$(34)
     CadInputQueue.SendKeyin "PRINT DRIVER " & driverArg
     CadInputQueue.SendKeyin "PRINT DESTINATION PLOTFILE"
     CadInputQueue.SendKeyin "PRINT COLORMODE COLOR"
     CadInputQueue.SendKeyin "PRINT AUTOCENTER ON"
-    ' Do not add MicroStation's own plot border or draw the fence boundary.
+    ' Nie dodawaj wlasnej ramki wydruku MicroStation ani obrysu fence'a.
     CadInputQueue.SendKeyin "PRINT ATTRIBUTES PLOTBORDER OFF"
     CadInputQueue.SendKeyin "PRINT ATTRIBUTES FENCEBOUNDARY OFF"
 
     LogLine "==== " & Format$(Now, "yyyy-mm-dd hh:nn:ss") & " ===="
     LogLine "DGN: " & df.FullName
-    LogLine "Driver: " & PDF_DRIVER
+    LogLine "Sterownik: " & PDF_DRIVER
 
     For i = 0 To n - 1
         If infos(i).Valid Then
@@ -263,42 +266,42 @@ Public Sub PrintCorrectSize()
                 okCount = okCount + 1
                 LogLine "OK   " & names(i) & " | " & _
                         Format$(infos(i).WidthMM, "0.0") & "x" & Format$(infos(i).HeightMM, "0.0") & _
-                        " mm | " & infos(i).Paper & " | measured " & _
+                        " mm | " & infos(i).Paper & " | zmierzono " & _
                         Format$(infos(i).MeasuredWidthMM, "0.0") & "x" & _
                         Format$(infos(i).MeasuredHeightMM, "0.0") & " mm | " & _
                         infos(i).Source & " | " & paths(i)
             Else
                 failCount = failCount + 1
-                LogLine "FAIL " & names(i) & " | " & paths(i)
+                LogLine "BLAD " & names(i) & " | " & paths(i)
             End If
         Else
             skipped = skipped + 1
-            LogLine "SKIP " & names(i)
+            LogLine "POMINIETY " & names(i)
         End If
     Next i
 
-    ' Leave the file as we found it.
+    ' Zostaw plik w takim stanie, w jakim go zastalismy.
     On Error Resume Next
     ActiveDesignFile.Fence.Undefine
     On Error GoTo 0
     originalModel.Activate
 
-    result = "Done." & vbCrLf & vbCrLf & _
-             "Created: " & okCount & vbCrLf & _
-             "Failed:  " & failCount & vbCrLf & _
-             "Skipped: " & skipped & vbCrLf & vbCrLf & _
+    result = "Gotowe." & vbCrLf & vbCrLf & _
+             "Utworzono: " & okCount & vbCrLf & _
+             "Bledy:     " & failCount & vbCrLf & _
+             "Pominiete: " & skipped & vbCrLf & vbCrLf & _
              "Folder: " & outFolder
 
     If failCount > 0 Then
         result = result & vbCrLf & vbCrLf & _
-                 "Check the PrintCorrectSize log and make sure the Bentley PDF driver " & _
-                 "(" & PDF_DRIVER & ") is installed and allows paper size editing."
+                 "Sprawdz log PrintCorrectSize i upewnij sie, ze sterownik Bentley PDF " & _
+                 "(" & PDF_DRIVER & ") jest zainstalowany i pozwala edytowac rozmiar papieru."
     End If
 
     MsgBox result, IIf(failCount > 0, vbExclamation, vbInformation), "PrintCorrectSize"
 End Sub
 
-' Shows the detected page sizes without printing.
+' Pokazuje wykryte rozmiary stron bez drukowania.
 Public Sub PreviewCorrectSize()
     Dim df As DesignFile
     Dim models As ModelReferences
@@ -311,14 +314,14 @@ Public Sub PreviewCorrectSize()
     Dim report As String
 
     If Not Application.HasActiveDesignFile Then
-        MsgBox "Open a DGN file first.", vbExclamation, "PrintCorrectSize"
+        MsgBox "Najpierw otworz plik DGN.", vbExclamation, "PrintCorrectSize"
         Exit Sub
     End If
 
     Set df = ActiveDesignFile
     Set models = df.Models
     If models.Count = 0 Then
-        MsgBox "The active DGN has no models.", vbExclamation, "PrintCorrectSize"
+        MsgBox "Aktywny plik DGN nie ma modeli.", vbExclamation, "PrintCorrectSize"
         Exit Sub
     End If
 
@@ -326,11 +329,11 @@ Public Sub PreviewCorrectSize()
     BuildPrintList models, printModels, n
 
     If n = 0 Then
-        MsgBox "No printable models found.", vbExclamation, "PrintCorrectSize"
+        MsgBox "Nie znaleziono modeli do wydruku.", vbExclamation, "PrintCorrectSize"
         Exit Sub
     End If
 
-    report = "Active DGN: " & df.FullName & vbCrLf & vbCrLf
+    report = "Aktywny DGN: " & df.FullName & vbCrLf & vbCrLf
 
     For i = 1 To n
         Set m = printModels(i - 1)
@@ -341,23 +344,23 @@ Public Sub PreviewCorrectSize()
         If pi.Valid Then
             report = report & "     " & Format$(pi.WidthMM, "0.0") & " x " & _
                      Format$(pi.HeightMM, "0.0") & " mm  [" & pi.Source & "]"
-            If pi.Paper <> "CUSTOM" Then
+            If pi.Paper <> "WLASNY" Then
                 report = report & "  ->  " & pi.Paper & _
-                         " (measured " & Format$(pi.MeasuredWidthMM, "0.0") & " x " & _
+                         " (zmierzono " & Format$(pi.MeasuredWidthMM, "0.0") & " x " & _
                          Format$(pi.MeasuredHeightMM, "0.0") & " mm)"
             End If
             report = report & vbCrLf
         Else
-            report = report & "     SKIPPED - no usable geometry" & vbCrLf
+            report = report & "     POMINIETY - brak geometrii" & vbCrLf
         End If
     Next i
     originalModel.Activate
 
-    MsgBox report, vbInformation, "PrintCorrectSize - preview"
+    MsgBox report, vbInformation, "PrintCorrectSize - podglad"
 End Sub
 
 '==============================================================================
-' Model selection
+' Wybor modeli
 '==============================================================================
 
 Private Sub BuildPrintList(ByVal models As ModelReferences, _
@@ -395,7 +398,7 @@ Private Function ShouldPrintModel(ByVal m As ModelReference, ByVal hasSheet As B
 End Function
 
 '==============================================================================
-' Page-size detection
+' Wykrywanie rozmiaru strony
 '==============================================================================
 
 Private Sub GetPageInfo(ByVal m As ModelReference, ByRef pi As PageInfo)
@@ -408,7 +411,8 @@ Private Sub GetPageInfo(ByVal m As ModelReference, ByRef pi As PageInfo)
     pi.IsSheet = (m.Type = msdModelTypeSheet)
     pi.Box.Valid = False
 
-    ' 1. Sheet model: the sheet definition is the authoritative page size.
+    ' 1. Model arkusza (sheet model): definicja arkusza jest nadrzednym
+    '    rozmiarem strony.
     If pi.IsSheet Then
         On Error Resume Next
         Err.Clear
@@ -416,7 +420,7 @@ Private Sub GetPageInfo(ByVal m As ModelReference, ByRef pi As PageInfo)
         If Err.Number = 0 Then
             If Not sd Is Nothing Then
                 If sd.Width > 0# And sd.Height > 0# Then
-                    SetPageSize pi, UORsToMM(m, sd.Width), UORsToMM(m, sd.Height), "SHEET"
+                    SetPageSize pi, UORsToMM(m, sd.Width), UORsToMM(m, sd.Height), "ARKUSZ"
                 End If
             End If
         End If
@@ -424,20 +428,20 @@ Private Sub GetPageInfo(ByVal m As ModelReference, ByRef pi As PageInfo)
         Err.Clear
         If pi.Valid Then Exit Sub
 
-        ' A sheet model without a usable sheet definition must be printed
-        ' from a fence, like a normal design model.
+        ' Model arkusza bez poprawnej definicji trzeba drukowac z fence'a,
+        ' tak jak zwykly model rysunkowy.
         pi.IsSheet = False
     End If
 
-    ' 2. Elements on a frame/plot level. This is the normal path for design
-    '    models with a frame on M_RAMKA or _RAMKA.
+    ' 2. Elementy na levelu ramki. To normalna sciezka dla modeli
+    '    rysunkowych z ramka na M_RAMKA albo _RAMKA.
     If Len(Trim$(BORDER_LEVEL_HINTS)) > 0 Then
         On Error Resume Next
         Err.Clear
         b = BBoxFromBorderLevels(m)
         If Err.Number = 0 And b.Valid Then
             SetPageSize pi, UORsToMM(m, b.MaxX - b.MinX), _
-                        UORsToMM(m, b.MaxY - b.MinY), "BORDER LEVEL"
+                        UORsToMM(m, b.MaxY - b.MinY), "LEVEL RAMKI"
             If pi.Valid Then
                 pi.Box = b
                 Exit Sub
@@ -447,7 +451,7 @@ Private Sub GetPageInfo(ByVal m As ModelReference, ByRef pi As PageInfo)
         Err.Clear
     End If
 
-    ' 3. Manual override: selected elements.
+    ' 3. Reczne wymuszenie: zaznaczone elementy.
     If USE_SELECTION_AS_PAGE Then
         On Error Resume Next
         Err.Clear
@@ -455,7 +459,7 @@ Private Sub GetPageInfo(ByVal m As ModelReference, ByRef pi As PageInfo)
             b = BBoxFromEnumerator(m.GetSelectedElements)
             If b.Valid Then
                 SetPageSize pi, UORsToMM(m, b.MaxX - b.MinX), _
-                            UORsToMM(m, b.MaxY - b.MinY), "SELECTION"
+                            UORsToMM(m, b.MaxY - b.MinY), "ZAZNACZENIE"
                 If pi.Valid Then
                     pi.Box = b
                     Exit Sub
@@ -466,13 +470,13 @@ Private Sub GetPageInfo(ByVal m As ModelReference, ByRef pi As PageInfo)
         Err.Clear
     End If
 
-    ' 4. Largest closed element (usually the sheet border).
+    ' 4. Najwiekszy zamkniety element (zwykle obrys arkusza).
     On Error Resume Next
     Err.Clear
     b = BBoxFromLargestClosedElement(m)
     If Err.Number = 0 And b.Valid Then
         SetPageSize pi, UORsToMM(m, b.MaxX - b.MinX), _
-                    UORsToMM(m, b.MaxY - b.MinY), "CLOSED ELEMENT"
+                    UORsToMM(m, b.MaxY - b.MinY), "ZAMKNIETY ELEMENT"
         If pi.Valid Then
             pi.Box = b
             Exit Sub
@@ -481,13 +485,13 @@ Private Sub GetPageInfo(ByVal m As ModelReference, ByRef pi As PageInfo)
     On Error GoTo 0
     Err.Clear
 
-    ' 5. Fallback: all graphical elements.
+    ' 5. Rozwiazanie awaryjne: wszystkie elementy graficzne.
     On Error Resume Next
     Err.Clear
     b = BBoxFromAllElements(m)
     If Err.Number = 0 And b.Valid Then
         SetPageSize pi, UORsToMM(m, b.MaxX - b.MinX), _
-                    UORsToMM(m, b.MaxY - b.MinY), "EXTENTS"
+                    UORsToMM(m, b.MaxY - b.MinY), "GRANICE"
         If pi.Valid Then
             pi.Box = b
         End If
@@ -537,16 +541,16 @@ Private Function BBoxFromBorderLevels(ByVal m As ModelReference) As BBox
             If MatchesAny(levelName, BORDER_LEVEL_HINTS) Then
                 r = el.Range(False)
 
-                ' Text and dimensions on the frame level must not enlarge the
-                ' page. They are usually notes placed outside the frame.
+                ' Tekst i wymiary na levelu ramki nie moga powiekszac strony.
+                ' To zwykle notatki umieszczone poza ramka.
                 If Not el.IsTextElement And Not el.IsTextNodeElement And _
                    Not el.IsDimensionElement Then
                     BBoxAdd allOnLevels, r
                 End If
 
-                ' Prefer the largest closed element (the frame shape) over the
-                ' union of everything on the level. This ignores notes or other
-                ' elements that happen to share the frame level.
+                ' Preferuj najwiekszy zamkniety element (ksztalt ramki) nad
+                ' suma wszystkiego na levelu. To ignoruje notatki i inne
+                ' elementy, ktore przypadkowo sa na levelu ramki.
                 If el.IsClosedElement Then
                     area = (r.High.X - r.Low.X) * (r.High.Y - r.Low.Y)
                     If area > bestArea Then
@@ -559,10 +563,9 @@ Private Function BBoxFromBorderLevels(ByVal m As ModelReference) As BBox
         End If
     Loop
 
-    ' Use whichever is larger: the frame shape or the union of non-text
-    ' elements on the frame level. A closed frame shape normally wins; when the
-    ' frame is drawn from lines, the union wins over a smaller closed title
-    ' block.
+    ' Wybierz wiekszy kandydat: ksztalt ramki albo suma elementow innych niz
+    ' tekst na levelu ramki. Zamknieta ramka zwykle wygrywa; gdy ramka jest
+    ' z linii, suma wygrywa z mniejszym zamknietym blokiem tytulowym.
     If closedBest.Valid And allOnLevels.Valid Then
         If BBoxArea(closedBest) > BBoxArea(allOnLevels) Then
             BBoxFromBorderLevels = closedBest
@@ -640,7 +643,7 @@ Private Sub BBoxInit(ByRef b As BBox)
 End Sub
 
 Private Sub BBoxAdd(ByRef b As BBox, ByRef r As Range3d)
-    ' Ignore null/invalid ranges.
+    ' Ignoruj puste lub niepoprawne zakresy.
     If r.High.X < r.Low.X Then Exit Sub
     If r.High.Y < r.Low.Y Then Exit Sub
 
@@ -676,7 +679,7 @@ Private Sub SetPageSize(ByRef pi As PageInfo, ByVal wMM As Double, ByVal hMM As 
     pi.WidthMM = wMM
     pi.HeightMM = hMM
     pi.Source = source
-    pi.Paper = "CUSTOM"
+    pi.Paper = "WLASNY"
 
     If SnapToStandard(wMM, hMM, stdW, stdH, paperName) Then
         pi.WidthMM = stdW
@@ -687,9 +690,9 @@ Private Sub SetPageSize(ByRef pi As PageInfo, ByVal wMM As Double, ByVal hMM As 
     pi.Valid = IsSanePage(pi.WidthMM, pi.HeightMM)
 End Sub
 
-' Returns True when the measured page is within the tolerance of one of the
-' sizes listed in STANDARD_SIZES_TO_SNAP. The returned width/height keep the
-' orientation of the measured page.
+' Zwraca True, gdy zmierzona strona miesci sie w tolerancji jednego z
+' rozmiarow z STANDARD_SIZES_TO_SNAP. Zwrocona szerokosc/wysokosc zachowuje
+' orientacje zmierzonej strony.
 Private Function SnapToStandard(ByVal wMM As Double, ByVal hMM As Double, _
                                 ByRef outW As Double, ByRef outH As Double, _
                                 ByRef paperName As String) As Boolean
@@ -704,7 +707,7 @@ Private Function SnapToStandard(ByVal wMM As Double, ByVal hMM As Double, _
     Dim candidate As String
 
     SnapToStandard = False
-    paperName = "CUSTOM"
+    paperName = "WLASNY"
 
     If Len(Trim$(STANDARD_SIZES_TO_SNAP)) = 0 Then Exit Function
 
@@ -747,7 +750,7 @@ Private Function SnapToStandard(ByVal wMM As Double, ByVal hMM As Double, _
     Next i
 End Function
 
-' ISO A and B sizes in millimetres, portrait orientation.
+' Rozmiary ISO A i B w milimetrach, orientacja pionowa.
 Private Function PaperDimensions(ByVal paperName As String, _
                                  ByRef wMM As Double, ByRef hMM As Double) As Boolean
     PaperDimensions = True
@@ -823,7 +826,7 @@ Private Function UORsToMM(ByVal m As ModelReference, ByVal uors As Double) As Do
 End Function
 
 '==============================================================================
-' Printing
+' Drukowanie
 '==============================================================================
 
 Private Function PrintOneModel(ByVal m As ModelReference, ByRef pi As PageInfo, _
@@ -837,21 +840,21 @@ Private Function PrintOneModel(ByVal m As ModelReference, ByRef pi As PageInfo, 
     PrintOneModel = False
     On Error GoTo errHandler
 
-    ' Select the print area first. For a sheet model this also makes
-    ' MicroStation use the sheet boundary.
+    ' Najpierw wybierz obszar druku. Dla modelu arkusza powoduje to rowniez
+    ' uzycie obrysu arkusza przez MicroStation.
     If pi.IsSheet Then
         CadInputQueue.SendKeyin "PRINT BOUNDARY SHEET"
     Else
         pageBox = pi.Box
         If Not DefineFenceForPage(m, pageBox) Then
-            LogLine "  cannot define fence for " & m.Name
+            LogLine "  nie mozna zdefiniowac fence'a dla " & m.Name
             Exit Function
         End If
         CadInputQueue.SendKeyin "PRINT BOUNDARY FENCE"
     End If
 
-    ' A Bentley driver uses a portrait form plus an orientation. Set the
-    ' short side as X and the long side as Y, then rotate if needed.
+    ' Sterownik Bentley uzywa formularza pionowego plus orientacji. Ustaw
+    ' krotszy bok jako X, dluzszy jako Y, a potem obroc, jesli trzeba.
     shortMM = pi.WidthMM
     longMM = pi.HeightMM
     If shortMM > longMM Then
@@ -866,7 +869,7 @@ Private Function PrintOneModel(ByVal m As ModelReference, ByRef pi As PageInfo, 
     End If
 
     CadInputQueue.SendKeyin "PRINT UNITS MM"
-    ' Set the form while it is in portrait orientation, then rotate.
+    ' Ustaw formularz w orientacji pionowej, a potem obroc strone.
     CadInputQueue.SendKeyin "PRINT ORIENTATION PORTRAIT"
     CadInputQueue.SendKeyin "PRINT XFORM " & KeyinNumber(shortMM) & " MM"
     CadInputQueue.SendKeyin "PRINT YFORM " & KeyinNumber(longMM) & " MM"
@@ -874,18 +877,18 @@ Private Function PrintOneModel(ByVal m As ModelReference, ByRef pi As PageInfo, 
     CadInputQueue.SendKeyin "PRINT AUTOCENTER ON"
     CadInputQueue.SendKeyin "PRINT MAXIMIZE"
 
-    ' Remove a stale file so a timeout cannot be mistaken for success.
+    ' Usun stary plik, zeby przekroczenie czasu nie zostalo uznane za sukces.
     On Error Resume Next
     If m_fso.FileExists(pdfPath) Then m_fso.DeleteFile pdfPath, True
     On Error GoTo errHandler
     Err.Clear
     If m_fso.FileExists(pdfPath) Then
-        LogLine "  cannot delete stale PDF: " & pdfPath
+        LogLine "  nie mozna usunac starego PDF-a: " & pdfPath
         Exit Function
     End If
 
-    ' Use a short folder path and a file name without spaces. This avoids
-    ' ambiguity when the key-in parser sees a path with spaces.
+    ' Uzyj krotkiej sciezki folderu i nazwy pliku bez spacji. To unika
+    ' niejednoznacznosci, gdy parser key-inow widzi sciezke ze spacjami.
     keyinPath = MakeKeyinPath(pdfPath)
     CadInputQueue.SendKeyin "PRINT EXECUTE " & keyinPath
 
@@ -893,7 +896,7 @@ Private Function PrintOneModel(ByVal m As ModelReference, ByRef pi As PageInfo, 
     Exit Function
 
 errHandler:
-    LogLine "  error " & Err.Number & ": " & Err.Description
+    LogLine "  blad " & Err.Number & ": " & Err.Description
     PrintOneModel = False
 End Function
 
@@ -967,7 +970,7 @@ Private Function WaitForPdf(ByVal path As String, ByVal timeoutSec As Long) As B
                     lastSize = sizeNow
                 End If
 
-                ' File size unchanged for ~0.6 s -> assume the PDF is complete.
+                ' Rozmiar pliku bez zmian przez ~0,6 s -> zakladamy, ze PDF jest gotowy.
                 If stableCount >= 3 Then
                     WaitForPdf = True
                     Exit Function
@@ -994,13 +997,13 @@ Private Function ElapsedSeconds(ByVal started As Double) As Double
     If nowValue >= started Then
         ElapsedSeconds = nowValue - started
     Else
-        ' Midnight rollover.
+        ' Przejscie przez polnoc.
         ElapsedSeconds = (86400# - started) + nowValue
     End If
 End Function
 
 '==============================================================================
-' Files, names, small helpers
+' Pliki, nazwy i drobne funkcje pomocnicze
 '==============================================================================
 
 Private Function PrintDriverExists(ByVal driverName As String) As Boolean
@@ -1012,7 +1015,7 @@ Private Function PrintDriverExists(ByVal driverName As String) As Boolean
     PrintDriverExists = False
     If Len(Trim$(driverName)) = 0 Then Exit Function
 
-    ' Allow PDF_DRIVER to be a full path as well as a file name.
+    ' Pozwol, zeby PDF_DRIVER byl pelna sciezka albo sama nazwa pliku.
     If m_fso.FileExists(driverName) Then
         PrintDriverExists = True
         Exit Function
@@ -1081,9 +1084,9 @@ Private Function MakePdfPath(ByVal df As DesignFile, ByVal m As ModelReference, 
     MakePdfPath = m_fso.BuildPath(outFolder, fileName)
 End Function
 
-' Returns a path suitable for the key-in parser. The short folder path removes
-' spaces from directory names; the file name is already sanitized by
-' SanitizeFileName. If a space somehow survives, the path is quoted.
+' Zwraca sciezke odpowiednia dla parsera key-inow. Krotka sciezka folderu
+' usuwa spacje z nazw katalogow; nazwa pliku jest juz oczyszczona przez
+' SanitizeFileName. Jesli gdzies zostanie spacja, sciezka jest ujeta w cudzyslow.
 Private Function MakeKeyinPath(ByVal path As String) As String
     Dim folder As String
     Dim fileName As String
@@ -1108,7 +1111,6 @@ End Function
 Private Function SanitizeFileName(ByVal s As String) As String
     Dim badChars As Variant
     Dim i As Long
-    Dim ch As String
     Dim result As String
 
     badChars = Array("\", "/", ":", "*", "?", Chr$(34), "<", ">", "|", " ", ";")
@@ -1117,6 +1119,27 @@ Private Function SanitizeFileName(ByVal s As String) As String
     For i = LBound(badChars) To UBound(badChars)
         result = Replace(result, CStr(badChars(i)), "_")
     Next i
+
+    ' Nazwy plikow dla key-inow zapisujemy bez polskich znakow. ChrW zachowuje
+    ' plik zrodlowy w ASCII, a wynik jest bezpieczny dla parsera V8i.
+    result = Replace(result, ChrW(&H105), "a")   ' a z ogonkiem
+    result = Replace(result, ChrW(&H104), "A")
+    result = Replace(result, ChrW(&H107), "c")   ' c z kreska
+    result = Replace(result, ChrW(&H106), "C")
+    result = Replace(result, ChrW(&H119), "e")   ' e z ogonkiem
+    result = Replace(result, ChrW(&H118), "E")
+    result = Replace(result, ChrW(&H142), "l")   ' l z kreska
+    result = Replace(result, ChrW(&H141), "L")
+    result = Replace(result, ChrW(&H144), "n")   ' n z kreska
+    result = Replace(result, ChrW(&H143), "N")
+    result = Replace(result, ChrW(&HF3), "o")    ' o z kreska
+    result = Replace(result, ChrW(&HD3), "O")
+    result = Replace(result, ChrW(&H15B), "s")   ' s z kreska
+    result = Replace(result, ChrW(&H15A), "S")
+    result = Replace(result, ChrW(&H17A), "z")   ' z z kreska
+    result = Replace(result, ChrW(&H179), "Z")
+    result = Replace(result, ChrW(&H17C), "z")   ' z z kropka
+    result = Replace(result, ChrW(&H17B), "Z")
 
     result = Trim$(result)
     If Len(result) = 0 Then result = "model"
@@ -1156,7 +1179,7 @@ Private Sub LogLine(ByVal text As String)
 
     If Len(m_logPath) = 0 Then Exit Sub
     On Error Resume Next
-    Set ts = m_fso.OpenTextFile(m_logPath, 8, True)
+    Set ts = m_fso.OpenTextFile(m_logPath, 8, True, -1)
     If Not ts Is Nothing Then
         ts.WriteLine text
         ts.Close
