@@ -754,7 +754,7 @@ Private Function PrintOneModel(ByVal m As ModelReference, ByRef pi As PageInfo, 
     Dim shortMM As Double
     Dim longMM As Double
     Dim orientation As String
-    Dim quotedPath As String
+    Dim keyinPath As String
     Dim pageBox As BBox
 
     PrintOneModel = False
@@ -806,8 +806,10 @@ Private Function PrintOneModel(ByVal m As ModelReference, ByRef pi As PageInfo, 
         Exit Function
     End If
 
-    quotedPath = Chr$(34) & pdfPath & Chr$(34)
-    CadInputQueue.SendKeyin "PRINT EXECUTE " & quotedPath
+    ' Use a short folder path and a file name without spaces. This avoids
+    ' ambiguity when the key-in parser sees a path with spaces.
+    keyinPath = MakeKeyinPath(pdfPath)
+    CadInputQueue.SendKeyin "PRINT EXECUTE " & keyinPath
 
     PrintOneModel = WaitForPdf(pdfPath, PDF_TIMEOUT_SEC)
     Exit Function
@@ -952,7 +954,7 @@ Private Function MakePdfPath(ByVal df As DesignFile, ByVal m As ModelReference, 
     Dim baseName As String
     Dim fileName As String
 
-    baseName = m_fso.GetBaseName(df.FullName)
+    baseName = SanitizeFileName(m_fso.GetBaseName(df.FullName))
 
     If modelCount = 1 Then
         fileName = baseName & ".pdf"
@@ -963,13 +965,36 @@ Private Function MakePdfPath(ByVal df As DesignFile, ByVal m As ModelReference, 
     MakePdfPath = m_fso.BuildPath(outFolder, fileName)
 End Function
 
+' Returns a path suitable for the key-in parser. The short folder path removes
+' spaces from directory names; the file name is already sanitized by
+' SanitizeFileName. If a space somehow survives, the path is quoted.
+Private Function MakeKeyinPath(ByVal path As String) As String
+    Dim folder As String
+    Dim fileName As String
+    Dim shortFolder As String
+
+    folder = m_fso.GetParentFolderName(path)
+    fileName = m_fso.GetFileName(path)
+
+    On Error Resume Next
+    shortFolder = m_fso.GetFolder(folder).ShortPath
+    On Error GoTo 0
+    If Len(shortFolder) = 0 Then shortFolder = folder
+
+    MakeKeyinPath = m_fso.BuildPath(shortFolder, fileName)
+
+    If InStr(MakeKeyinPath, " ") > 0 Then
+        MakeKeyinPath = Chr$(34) & MakeKeyinPath & Chr$(34)
+    End If
+End Function
+
 Private Function SanitizeFileName(ByVal s As String) As String
     Dim badChars As Variant
     Dim i As Long
     Dim ch As String
     Dim result As String
 
-    badChars = Array("\", "/", ":", "*", "?", Chr$(34), "<", ">", "|")
+    badChars = Array("\", "/", ":", "*", "?", Chr$(34), "<", ">", "|", " ", ";")
     result = s
 
     For i = LBound(badChars) To UBound(badChars)

@@ -88,7 +88,8 @@ Detailed instructions, including how to find the right folder, are in
    <dgn-name>_<model-name>.pdf
    ```
 
-   If only one model is printed, the name is `<dgn-name>.pdf`.
+   If only one model is printed, the name is `<dgn-name>.pdf`. Spaces and
+   characters that are invalid in Windows file names are replaced by `_`.
 
 ## How the page size is detected
 

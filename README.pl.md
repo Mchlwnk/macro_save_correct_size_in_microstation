@@ -89,6 +89,7 @@ Szczegółowa instrukcja: [`docs/INSTALL.md`](docs/INSTALL.md).
    ```
 
    Jeśli drukowany jest tylko jeden model, nazwa to `<nazwa-dgn>.pdf`.
+   Spacje i znaki niedozwolone w nazwach plików Windows są zamieniane na `_`.
 
 ## Jak wykrywany jest rozmiar
 

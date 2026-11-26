@@ -164,6 +164,14 @@ the source:
   nothing is on a hidden/frozen level;
 - select the full border manually.
 
+## The DGN or output folder contains spaces
+
+The macro normally converts the output folder to its Windows short path
+(`PROGRA~1` style) and replaces spaces in the file name with `_`. This avoids
+problems with the MicroStation key-in parser. If the volume does not provide
+short paths (some network shares), the macro falls back to quoting the path.
+If that still fails, use a DGN/output folder without spaces for the test.
+
 ## The macro changes my fence or active model
 
 The macro uses a temporary MicroStation fence and activates each model while
