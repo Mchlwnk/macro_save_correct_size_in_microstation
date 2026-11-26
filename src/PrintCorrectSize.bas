@@ -218,6 +218,9 @@ Public Sub PrintCorrectSize()
     CadInputQueue.SendKeyin "PRINT DESTINATION PLOTFILE"
     CadInputQueue.SendKeyin "PRINT COLORMODE COLOR"
     CadInputQueue.SendKeyin "PRINT AUTOCENTER ON"
+    ' Do not add MicroStation's own plot border or draw the fence boundary.
+    CadInputQueue.SendKeyin "PRINT ATTRIBUTES PLOTBORDER OFF"
+    CadInputQueue.SendKeyin "PRINT ATTRIBUTES FENCEBOUNDARY OFF"
 
     LogLine "==== " & Format$(Now, "yyyy-mm-dd hh:nn:ss") & " ===="
     LogLine "DGN: " & df.FullName
