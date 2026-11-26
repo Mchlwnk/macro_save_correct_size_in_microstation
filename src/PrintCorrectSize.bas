@@ -528,13 +528,28 @@ Private Function BBoxFromBorderLevels(ByVal m As ModelReference) As BBox
         End If
     Loop
 
-    ' The frame level is dedicated to the frame, so the largest closed element
-    ' is the frame shape. If the frame is drawn from lines, there is no closed
-    ' element and the union of the level is used instead.
-    If closedBest.Valid Then
+    ' Use whichever is larger: the frame shape or the union of non-text
+    ' elements on the frame level. A closed frame shape normally wins; when the
+    ' frame is drawn from lines, the union wins over a smaller closed title
+    ' block.
+    If closedBest.Valid And allOnLevels.Valid Then
+        If BBoxArea(closedBest) > BBoxArea(allOnLevels) Then
+            BBoxFromBorderLevels = closedBest
+        Else
+            BBoxFromBorderLevels = allOnLevels
+        End If
+    ElseIf closedBest.Valid Then
         BBoxFromBorderLevels = closedBest
     Else
         BBoxFromBorderLevels = allOnLevels
+    End If
+End Function
+
+Private Function BBoxArea(ByRef b As BBox) As Double
+    If Not b.Valid Then
+        BBoxArea = 0#
+    Else
+        BBoxArea = (b.MaxX - b.MinX) * (b.MaxY - b.MinY)
     End If
 End Function
 
