@@ -202,7 +202,18 @@ Wszystkie ustawienia to stałe na początku `PrintCorrectSize.bas`:
 
 ## Testowanie
 
-Przed użyciem na produkcyjnych rysunkach przejdź przez
+Najpierw uruchom wbudowany test logiki (nie wymaga otwartego DGN i nie
+drukuje niczego):
+
+```text
+vba run [PrintCorrectSize]PrintCorrectSize.SelfTest
+```
+
+Powinno pojawić się `SelfTest OK`. Test sprawdza zaokrąglanie A4/A3,
+nierozpoznawanie A2/B1, nazwy plików, polskie znaki i wykrywanie leveli
+`RAMKA` / `_RAMKA`.
+
+Przed użyciem na produkcyjnych rysunkach przejdź też przez
 [`docs/TEST_CHECKLIST.md`](docs/TEST_CHECKLIST.md).
 
 ## Problemy

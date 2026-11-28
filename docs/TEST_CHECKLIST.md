@@ -13,6 +13,12 @@ na produkcyjnych rysunkach.
 - [ ] Sprawdź, czy sterownik pozwala na edycję rozmiaru papieru.
 - [ ] Sprawdź, czy ramki są na levelach `M_RAMKA` albo ` _RAMKA`.
 
+## SelfTest
+
+- [ ] Uruchom `PrintCorrectSize.SelfTest`.
+- [ ] Komunikat to `SelfTest OK`.
+- [ ] Liczba sprawdzonych testów jest większa od zera.
+
 ## Podgląd
 
 - [ ] Uruchom `PrintCorrectSize.Preview`.

@@ -129,6 +129,18 @@ Cudzysłowy są potrzebne, gdy ścieżka zawiera spacje.
 
 ## 6. Uruchom makro
 
+### SelfTest — sprawdzenie logiki
+
+Najpierw uruchom test wbudowany. Nie wymaga otwartego DGN i niczego nie
+drukuje:
+
+```text
+vba run [PrintCorrectSize]PrintCorrectSize.SelfTest
+```
+
+Powinien pojawić się komunikat `SelfTest OK`. Jeśli pojawi się `SelfTest:
+BLAD`, makro zostało źle zaimportowane albo plik `.bas` został zmieniony.
+
 ### Podgląd — najpierw to uruchom
 
 Otwórz **Utilities > Key-in** i wpisz:

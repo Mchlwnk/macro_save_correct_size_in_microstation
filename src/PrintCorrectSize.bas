@@ -116,6 +116,107 @@ Public Sub Preview()
     PreviewCorrectSize
 End Sub
 
+' Testuje logike rozmiarow i nazw plikow bez drukowania i bez DGN.
+' Uruchom: vba run [PrintCorrectSize]PrintCorrectSize.SelfTest
+Public Sub SelfTest()
+    Dim failures As Long
+    Dim total As Long
+    Dim result As String
+    Dim polishName As String
+    Dim failNames As String
+
+    failures = 0
+    total = 0
+    failNames = ""
+
+    CheckSnap "A4 212x299", 212#, 299#, True, "A4", 210#, 297#, failures, total, failNames
+    CheckSnap "A4 poziomo 299x212", 299#, 212#, True, "A4", 297#, 210#, failures, total, failNames
+    CheckSnap "A3 300x423", 300#, 423#, True, "A3", 297#, 420#, failures, total, failNames
+    CheckSnap "A4 za daleko 216x300", 216#, 300#, False, "", 0#, 0#, failures, total, failNames
+    CheckSnap "A2 bez zaokraglania 420x594", 420#, 594#, False, "", 0#, 0#, failures, total, failNames
+    CheckSnap "B1 bez zaokraglania 707x1000", 707#, 1000#, False, "", 0#, 0#, failures, total, failNames
+
+    total = total + 1
+    If KeyinNumber(210#) <> "210.000" Then
+        failures = failures + 1
+        failNames = failNames & "KeyinNumber; "
+    End If
+
+    total = total + 1
+    If Not MatchesAny("M_RAMKA", "RAMKA") Then
+        failures = failures + 1
+        failNames = failNames & "MatchesAny M_RAMKA; "
+    End If
+    total = total + 1
+    If Not MatchesAny(" _RAMKA", "RAMKA") Then
+        failures = failures + 1
+        failNames = failNames & "MatchesAny _RAMKA; "
+    End If
+
+    total = total + 1
+    If SanitizeFileName("A/B:C") <> "A_B_C" Then
+        failures = failures + 1
+        failNames = failNames & "Sanitize A/B:C; "
+    End If
+    total = total + 1
+    If SanitizeFileName("   ") <> "model" Then
+        failures = failures + 1
+        failNames = failNames & "Sanitize spaces; "
+    End If
+    total = total + 1
+    If SanitizeFileName("CON") <> "_CON" Then
+        failures = failures + 1
+        failNames = failNames & "Sanitize CON; "
+    End If
+
+    polishName = "Mapa " & ChrW(&H141) & ChrW(&HF3) & "d" & ChrW(&H17A) & " 1"
+    total = total + 1
+    If SanitizeFileName(polishName) <> "Mapa_Lodz_1" Then
+        failures = failures + 1
+        failNames = failNames & "Sanitize Polish; "
+    End If
+
+    If failures = 0 Then
+        result = "SelfTest OK." & vbCrLf & vbCrLf & _
+                 "Sprawdzone testy: " & total & "/" & total
+    Else
+        result = "SelfTest: BLAD" & vbCrLf & vbCrLf & _
+                 "Nieudane testy: " & failures & " z " & total & vbCrLf & vbCrLf & _
+                 failNames
+    End If
+
+    MsgBox result, IIf(failures = 0, vbInformation, vbExclamation), "PrintCorrectSize - SelfTest"
+End Sub
+
+Private Sub CheckSnap(ByVal testName As String, ByVal wMM As Double, ByVal hMM As Double, _
+                      ByVal expectSnap As Boolean, ByVal expectPaper As String, _
+                      ByVal expectW As Double, ByVal expectH As Double, _
+                      ByRef failures As Long, ByRef total As Long, ByRef failNames As String)
+    Dim outW As Double
+    Dim outH As Double
+    Dim paperName As String
+    Dim gotSnap As Boolean
+
+    total = total + 1
+    gotSnap = SnapToStandard(wMM, hMM, outW, outH, paperName)
+
+    If gotSnap <> expectSnap Then
+        failures = failures + 1
+        failNames = failNames & testName & " (snap); "
+        Exit Sub
+    End If
+
+    If expectSnap Then
+        If paperName <> expectPaper Then
+            failures = failures + 1
+            failNames = failNames & testName & " (paper); "
+        ElseIf Abs(outW - expectW) > 0.01 Or Abs(outH - expectH) > 0.01 Then
+            failures = failures + 1
+            failNames = failNames & testName & " (size); "
+        End If
+    End If
+End Sub
+
 ' Drukuje wszystkie modele z aktywnego DGN do osobnych PDF-ow.
 Public Sub PrintCorrectSize()
     Dim df As DesignFile
@@ -1114,7 +1215,11 @@ Private Function SanitizeFileName(ByVal s As String) As String
     Dim result As String
 
     badChars = Array("\", "/", ":", "*", "?", Chr$(34), "<", ">", "|", " ", ";")
-    result = s
+    result = Trim$(s)
+    If Len(result) = 0 Then
+        SanitizeFileName = "model"
+        Exit Function
+    End If
 
     For i = LBound(badChars) To UBound(badChars)
         result = Replace(result, CStr(badChars(i)), "_")
@@ -1142,9 +1247,44 @@ Private Function SanitizeFileName(ByVal s As String) As String
     result = Replace(result, ChrW(&H17B), "Z")
 
     result = Trim$(result)
+
+    ' Windows nie akceptuje nazw zakonczonych kropka.
+    Do While Len(result) > 0
+        If Right$(result, 1) = "." Then
+            result = Left$(result, Len(result) - 1)
+        Else
+            Exit Do
+        End If
+    Loop
+
     If Len(result) = 0 Then result = "model"
+    If IsReservedFileName(result) Then result = "_" & result
     If Len(result) > 120 Then result = Left$(result, 120)
     SanitizeFileName = result
+End Function
+
+Private Function IsReservedFileName(ByVal name As String) As Boolean
+    Dim reserved As Variant
+    Dim baseName As String
+    Dim i As Long
+
+    reserved = Array("CON", "PRN", "AUX", "NUL", _
+                     "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8", "COM9", _
+                     "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9")
+
+    baseName = UCase$(name)
+    If InStr(baseName, ".") > 0 Then
+        baseName = Left$(baseName, InStr(baseName, ".") - 1)
+    End If
+
+    For i = LBound(reserved) To UBound(reserved)
+        If baseName = CStr(reserved(i)) Then
+            IsReservedFileName = True
+            Exit Function
+        End If
+    Next i
+
+    IsReservedFileName = False
 End Function
 
 Private Function KeyinNumber(ByVal value As Double) As String
